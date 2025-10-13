@@ -147,7 +147,14 @@ install_bun() {
     if command -v bun &> /dev/null; then
         BUN_VERSION=$(bun --version)
         log_info "Bun is already installed: v$BUN_VERSION"
-        log_info "Skipping installation..."
+
+        # Get actual Bun path and set BUN_INSTALL for consistency
+        BUN_PATH=$(which bun)
+        BUN_DIR=$(dirname "$BUN_PATH")
+        export BUN_INSTALL=$(dirname "$BUN_DIR")
+        export PATH="$BUN_INSTALL/bin:$PATH"
+
+        log_success "Using existing Bun installation: $BUN_PATH"
         return
     fi
 
@@ -368,19 +375,17 @@ start_web_server() {
 
     log_info "Starting web server on http://localhost:5775..."
 
-    # Ensure Bun is in PATH (for nohup)
-    export BUN_INSTALL="$HOME/.bun"
-    export PATH="$BUN_INSTALL/bin:$PATH"
-
-    # Check if bun is available
-    if ! command -v bun &> /dev/null; then
+    # Get Bun path dynamically
+    BUN_PATH=$(which bun)
+    if [[ -z "$BUN_PATH" ]]; then
         log_error "Bun command not found. Please check Bun installation."
-        log_info "Try running: export PATH=\"$HOME/.bun/bin:\$PATH\""
         return 1
     fi
 
-    # Start server in background with full path to bun
-    nohup "$BUN_INSTALL/bin/bun" run dev serve > "$HOME/.local/state/cc-pulse/logs/server.log" 2>&1 &
+    log_info "Using Bun: $BUN_PATH"
+
+    # Start server in background with dynamic bun path
+    nohup "$BUN_PATH" run dev serve > "$HOME/.local/state/cc-pulse/logs/server.log" 2>&1 &
     SERVER_PID=$!
 
     # Wait a moment for server to start
