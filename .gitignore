@@ -1,0 +1,60 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# direnv
+.envrc
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+mcp/__pycache__/
+mcp/.venv/
+
+# Serena MCP cache
+.serena/
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IDEs and Editors
+.idea
+.cursor
+.vscode
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# Claude
+.mcp.json
+.claude
+
+# Built CSS (Tailwind)
+src/templates/styles.built.css
+
+# Private development documentation
+docs/
