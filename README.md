@@ -1,0 +1,95 @@
+# cc-pulse
+
+macOS向け自動ニュース収集CLIツール - Claude Agent SDK統合
+
+## 前提条件
+
+- [Bun](https://bun.sh/) v1.2.0以降
+- [uv](https://docs.astral.sh/uv/) (Python環境管理)
+- macOS (launchdスケジューラーを使用)
+- CLAUDE_CODE_OAUTH_TOKEN環境変数（または ANTHROPIC_API_KEY）
+
+## セットアップ
+
+```bash
+# 1. リポジトリクローン
+git clone https://github.com/yourusername/cc-pulse.git
+cd cc-pulse
+
+# 2. 依存関係インストール + 初期セットアップ
+bun run setup
+```
+
+セットアップでは以下が自動実行されます:
+- 依存関係インストール (bun install)
+- ディレクトリ作成
+- 設定ファイル作成 (~/.config/cc-pulse/config.yml)
+- Python MCP環境セットアップ
+- Embeddingモデルダウンロード
+
+## 基本的な使い方
+
+```bash
+# スケジューラー起動（WebUI + 定期ニュース収集）
+bun run dev schedule
+
+# 即座にニュース収集実行
+bun run dev fetch
+
+# Web UIで閲覧（既に起動している場合は不要）
+bun run dev serve
+
+# ステータス確認
+bun run dev status
+
+# アンインストール
+bun run dev uninstall
+```
+
+## コマンドリファレンス
+
+| コマンド | 説明 |
+|---------|------|
+| `setup` | 初期セットアップ（依存関係インストール含む） |
+| `schedule` | スケジューラー設定（対話的） |
+| `schedule --no-ui` | WebUIなしでスケジュールのみ起動 |
+| `fetch` | 即座にニュース収集実行 |
+| `serve` | Web UIサーバー起動 |
+| `status` | システムステータス表示 |
+| `uninstall` | 完全アンインストール |
+
+## 設定ファイル
+
+`~/.config/cc-pulse/config.yml`
+
+```yaml
+keywords:
+  - AI
+  - Machine Learning
+  - Claude
+count: 5
+language: ja
+port: 5775
+
+scheduler:
+  enabled: false
+  time: "09:00"
+  pattern: daily  # daily | weekday | weekend | custom
+  custom_days: []
+  auto_start_webui: true
+```
+
+## ビルド
+
+```bash
+# macOS ARM64向け
+bun run build:arm64
+
+# macOS x64向け
+bun run build:x64
+
+# 両方
+bun run build
+```
+
+ビルド成果物は `dist/` に出力されます。

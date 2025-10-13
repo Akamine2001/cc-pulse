@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- アプリ識別情報 -->
+	<key>CFBundleName</key>
+	<string>cc-pulse</string>
+	<key>CFBundleDisplayName</key>
+	<string>cc-pulse</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.ccpulse.app</string>
+
+	<!-- バージョン -->
+	<key>CFBundleVersion</key>
+	<string>0.1.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+
+	<!-- 実行ファイル -->
+	<key>CFBundleExecutable</key>
+	<string>cc-pulse</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+
+	<!-- アイコンファイル -->
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+
+	<!-- システム要件 -->
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+
+	<!-- UIレス実行（メニューバーに表示しない） -->
+	<key>LSUIElement</key>
+	<true/>
+
+	<!-- アプリカテゴリ -->
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+
+	<!-- 著作権情報 -->
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2025 cc-pulse</string>
+</dict>
+</plist>

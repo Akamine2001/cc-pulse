@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.cc-pulse.webserver</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>{{executablePath}}</string>
+		{{#if cliPath}}
+		<string>run</string>
+		<string>{{cliPath}}</string>
+		{{/if}}
+		<string>serve</string>
+	</array>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>KeepAlive</key>
+	<true/>
+
+	<key>StandardOutPath</key>
+	<string>{{logPath}}/webserver.log</string>
+
+	<key>StandardErrorPath</key>
+	<string>{{logPath}}/webserver.error.log</string>
+
+	<key>WorkingDirectory</key>
+	<string>{{workingDir}}</string>
+
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>com.ccpulse.app</string>
+	</array>
+</dict>
+</plist>

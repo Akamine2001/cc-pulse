@@ -1,0 +1,28 @@
+# Bun configuration file
+
+[install]
+# Cache settings
+cache = true
+
+# Install options
+production = false
+optional = true
+dev = true
+peer = false
+
+[install.scopes]
+# Custom registry settings (if needed)
+
+[test]
+# Test configuration
+preload = ["./tests/setup.ts"]
+
+[build]
+# Build configuration
+minify = true
+sourcemap = "external"
+target = "bun"
+
+[run]
+# Runtime configuration
+smol = false

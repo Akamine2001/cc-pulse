@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.cc-pulse.fetcher</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>{{executablePath}}</string>
+		{{#if cliPath}}
+		<string>run</string>
+		<string>{{cliPath}}</string>
+		{{/if}}
+		<string>fetch</string>
+	</array>
+
+	<key>StartCalendarInterval</key>
+	{{#if isDaily}}
+	<dict>
+		<key>Hour</key>
+		<integer>{{scheduleHour}}</integer>
+		<key>Minute</key>
+		<integer>{{scheduleMinute}}</integer>
+	</dict>
+	{{else}}
+	<array>
+		{{#each scheduleDays}}
+		<dict>
+			<key>Weekday</key>
+			<integer>{{this}}</integer>
+			<key>Hour</key>
+			<integer>{{../scheduleHour}}</integer>
+			<key>Minute</key>
+			<integer>{{../scheduleMinute}}</integer>
+		</dict>
+		{{/each}}
+	</array>
+	{{/if}}
+
+	<key>StandardOutPath</key>
+	<string>{{logPath}}/fetcher.log</string>
+
+	<key>StandardErrorPath</key>
+	<string>{{logPath}}/fetcher.error.log</string>
+
+	<key>WorkingDirectory</key>
+	<string>{{workingDir}}</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/Users/{{userName}}/.bun/bin:/Users/{{userName}}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+		<key>HOME</key>
+		<string>/Users/{{userName}}</string>
+	</dict>
+
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>com.ccpulse.app</string>
+	</array>
+</dict>
+</plist>

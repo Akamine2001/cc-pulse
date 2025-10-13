@@ -1,0 +1,44 @@
+#!/bin/bash
+# postinstall - .pkgインストール後に実行される処理
+# このスクリプトはインストーラーがsudo権限で実行します
+
+set -e
+
+echo "🔧 cc-pulse post-installation..."
+
+# アプリケーションパス
+APP_PATH="/Applications/cc-pulse.app"
+CLI_BINARY="${APP_PATH}/Contents/MacOS/cc-pulse"
+REGISTER_HELPER="${APP_PATH}/Contents/MacOS/cc-pulse-register"
+SYMLINK_PATH="/usr/local/bin/cc-pulse"
+
+# /usr/local/bin ディレクトリの確認・作成
+if [ ! -d "/usr/local/bin" ]; then
+    echo "  Creating /usr/local/bin directory..."
+    mkdir -p /usr/local/bin
+    chmod 755 /usr/local/bin
+fi
+
+# 既存のシンボリックリンクを削除
+if [ -L "$SYMLINK_PATH" ] || [ -e "$SYMLINK_PATH" ]; then
+    echo "  Removing existing symlink..."
+    rm -f "$SYMLINK_PATH"
+fi
+
+# シンボリックリンク作成
+echo "  Creating symlink: $SYMLINK_PATH -> $CLI_BINARY"
+ln -sf "$CLI_BINARY" "$SYMLINK_PATH"
+
+# 実行権限の確認・設定
+echo "  Setting executable permissions..."
+chmod +x "$CLI_BINARY"
+chmod +x "$REGISTER_HELPER"
+
+# シンボリックリンクの確認
+if [ -L "$SYMLINK_PATH" ]; then
+    echo "✅ Post-installation completed successfully"
+    exit 0
+else
+    echo "❌ Failed to create symlink"
+    exit 1
+fi
