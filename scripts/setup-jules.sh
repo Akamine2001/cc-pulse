@@ -368,8 +368,19 @@ start_web_server() {
 
     log_info "Starting web server on http://localhost:5775..."
 
-    # Start server in background
-    nohup bun run dev serve > "$HOME/.local/state/cc-pulse/logs/server.log" 2>&1 &
+    # Ensure Bun is in PATH (for nohup)
+    export BUN_INSTALL="$HOME/.bun"
+    export PATH="$BUN_INSTALL/bin:$PATH"
+
+    # Check if bun is available
+    if ! command -v bun &> /dev/null; then
+        log_error "Bun command not found. Please check Bun installation."
+        log_info "Try running: export PATH=\"$HOME/.bun/bin:\$PATH\""
+        return 1
+    fi
+
+    # Start server in background with full path to bun
+    nohup "$BUN_INSTALL/bin/bun" run dev serve > "$HOME/.local/state/cc-pulse/logs/server.log" 2>&1 &
     SERVER_PID=$!
 
     # Wait a moment for server to start
@@ -382,6 +393,14 @@ start_web_server() {
     else
         log_error "Failed to start web server"
         log_info "Check logs: $HOME/.local/state/cc-pulse/logs/server.log"
+
+        # Show last 20 lines of log for debugging
+        if [[ -f "$HOME/.local/state/cc-pulse/logs/server.log" ]]; then
+            echo ""
+            log_warn "Last 20 lines of server log:"
+            tail -n 20 "$HOME/.local/state/cc-pulse/logs/server.log"
+        fi
+
         return 1
     fi
 }

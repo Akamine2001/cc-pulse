@@ -370,13 +370,16 @@ def update_feedback_samples(articles: List[Dict]) -> None:
     # Set sample feedback values
     # First article: Good
     if len(articles) > 0:
-        db.db.prepare('UPDATE articles SET is_good = ? WHERE id = ?').run(1, articles[0]['id'])
+        db.conn.execute('UPDATE articles SET is_good = ? WHERE id = ?', (1, articles[0]['id']))
         print(f"  Set feedback 'good' for: {articles[0]['title'][:50]}...")
 
     # Second article: Bad
     if len(articles) > 1:
-        db.db.prepare('UPDATE articles SET is_good = ? WHERE id = ?').run(0, articles[1]['id'])
+        db.conn.execute('UPDATE articles SET is_good = ? WHERE id = ?', (0, articles[1]['id']))
         print(f"  Set feedback 'bad' for: {articles[1]['title'][:50]}...")
+
+    # Commit changes
+    db.conn.commit()
 
     # Rest: No feedback (NULL)
     print(f"  Remaining {len(articles) - 2} articles have no feedback (NULL)")
