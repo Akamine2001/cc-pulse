@@ -119,7 +119,6 @@ function App() {
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <h1 className="text-2xl font-bold text-gray-900">CC Pulse</h1>
-          <p className="text-sm text-gray-600 mt-1">AIニュース収集ツール</p>
         </div>
       </header>
 
@@ -194,7 +193,7 @@ function App() {
             <div className="space-y-6">
               {newsData.news.length === 0 && (
                 <p className="text-center text-gray-600 py-12">
-                  この収集にはニュースがありません
+                  収集されたニュースが見つかりませんでした。
                 </p>
               )}
               {newsData.news.map((article, index) => (
@@ -385,7 +384,7 @@ function ArticleCard({ article }: { article: FinalNewsItem }) {
               } disabled:opacity-50 disabled:cursor-not-allowed`}
               title="この記事は役に立ちました"
             >
-              良い
+              Good
               {feedbackState === 'good' && ' ✓'}
             </button>
             <button
@@ -398,7 +397,7 @@ function ArticleCard({ article }: { article: FinalNewsItem }) {
               } disabled:opacity-50 disabled:cursor-not-allowed`}
               title="この記事は役に立ちませんでした"
             >
-              悪い
+              Bad
               {feedbackState === 'bad' && ' ✓'}
             </button>
           </div>
