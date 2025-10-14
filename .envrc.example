@@ -1,0 +1,35 @@
+# cc-pulse Development Environment Variables
+#
+# This file is a template for .envrc (used with direnv).
+# Copy this file to .envrc and fill in your certificate information.
+#
+# Setup:
+#   1. Install direnv: https://direnv.net/
+#   2. Copy this file: cp .envrc.example .envrc
+#   3. Edit .envrc with your certificate information
+#   4. Allow direnv: direnv allow
+#
+# Note: .envrc is git-ignored and will not be committed.
+
+# Developer ID Application certificate (for .app signing)
+# Format: "Developer ID Application: Your Name (TEAM_ID)"
+# Find your certificate:
+#   security find-identity -v -p basic | grep "Developer ID Application"
+export DEVELOPER_ID="Developer ID Application: YOUR_NAME (YOUR_TEAM_ID)"
+
+# Developer ID Installer certificate (for .pkg signing)
+# Format: "Developer ID Installer: Your Name (TEAM_ID)"
+# Find your certificate:
+#   security find-identity -v -p basic | grep "Developer ID Installer"
+export DEVELOPER_ID_INSTALLER="Developer ID Installer: YOUR_NAME (YOUR_TEAM_ID)"
+
+# Optional: Apple ID for notarization (future use)
+# export APPLE_ID="your-apple-id@example.com"
+# export APPLE_TEAM_ID="YOUR_TEAM_ID"
+
+# Claude Agent SDK API Token (required for news collection)
+# Claude Agent SDK supports both CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY
+# Use either one (CLAUDE_CODE_OAUTH_TOKEN is recommended)
+# Get your token from: https://console.anthropic.com/
+export CLAUDE_CODE_OAUTH_TOKEN="your-token-here"
+# export ANTHROPIC_API_KEY="sk-ant-..."

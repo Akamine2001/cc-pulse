@@ -51,7 +51,9 @@ mcp/.venv/
 
 # Claude
 .mcp.json
-.claude
+!.claude/
+.claude/*
+!.claude/settings.json
 
 # Built CSS (Tailwind)
 src/templates/styles.built.css

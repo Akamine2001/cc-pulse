@@ -1,0 +1,132 @@
+name: PR Code Review with Serena
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+    paths:
+      - '**.ts'
+      - '**.tsx'
+      - '**.py'
+      - '**.js'
+      - '**.jsx'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # リポジトリのチェックアウト
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # Bun環境セットアップ
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # 依存関係インストール
+      - name: Install Dependencies
+        run: |
+          bun install
+          bun add @anthropic-ai/sdk octokit
+
+      # Python環境セットアップ (Serena MCP用)
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # uv インストール (Python MCP管理用)
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      # PR作成者のSerenaコンテキスト取得
+      - name: Download Developer's Serena Context
+        id: serena-download
+        run: |
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+          TAG="serena-${PR_AUTHOR}"
+
+          echo "Attempting to download context from: ${TAG}"
+
+          # 開発者のコンテキストをダウンロード試行
+          if gh release download "${TAG}" --pattern "*.tar.gz" -D /tmp 2>/dev/null; then
+            echo "✅ Found ${PR_AUTHOR}'s serena context"
+            # 最新のtar.gzファイルを展開
+            LATEST_ARCHIVE=$(ls -t /tmp/*.tar.gz | head -1)
+            tar -xzf "${LATEST_ARCHIVE}" -C .
+            rm "${LATEST_ARCHIVE}"
+            echo "context_found=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ No serena context found for ${PR_AUTHOR}"
+            echo "context_found=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # Serenaコンテキストが無い場合は基本的な初期化
+      - name: Initialize Serena if needed
+        if: steps.serena-download.outputs.context_found != 'true'
+        run: |
+          echo "⚠️ No Serena context available for this PR author"
+          echo "Creating minimal .serena structure for basic review..."
+
+          mkdir -p .serena/memories
+          cat > .serena/memories/project_overview.md << EOF
+          # cc-pulse Project Overview (Basic)
+
+          Initialized for PR review without developer context.
+
+          **Repository**: ${{ github.repository }}
+          **PR**: #${{ github.event.pull_request.number }}
+          **Author**: ${{ github.event.pull_request.user.login }}
+
+          This is a macOS CLI tool for automated news collection using Claude Agent SDK.
+          EOF
+
+      # GitHub Actionsキャッシュで補完
+      - name: Cache Serena Analysis
+        uses: actions/cache@v4
+        with:
+          path: .serena/cache
+          key: serena-cache-${{ runner.os }}-${{ hashFiles('**/*.ts', '**/*.py', '**/*.js') }}
+          restore-keys: |
+            serena-cache-${{ runner.os }}-
+
+      # PR差分取得
+      - name: Get PR Diff
+        id: get-diff
+        run: |
+          gh pr diff ${{ github.event.pull_request.number }} > pr-diff.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # TypeScriptレビュースクリプト実行
+      - name: Run Review Script
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          bun run scripts/review-pr.ts
+
+      # エラー時のフォールバック
+      - name: Fallback Comment on Error
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "⚠️ 自動レビューでエラーが発生しました。ログを確認してください。"
