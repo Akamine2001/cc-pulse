@@ -119,7 +119,7 @@ function App() {
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <h1 className="text-2xl font-bold text-gray-900">CC Pulse</h1>
-          <p className="text-sm text-gray-600 mt-1">AI-Powered News Aggregator</p>
+          <p className="text-sm text-gray-600 mt-1">AIニュース収集ツール</p>
         </div>
       </header>
 
@@ -127,7 +127,7 @@ function App() {
         {/* Datetime Selector */}
         <div className="mb-6">
           <label htmlFor="datetime-select" className="block text-sm font-medium text-gray-700 mb-2">
-            Select Collection
+            収集日時を選択
           </label>
           <select
             id="datetime-select"
@@ -136,7 +136,7 @@ function App() {
             className="block w-full sm:w-96 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           >
             {datetimes.length === 0 && (
-              <option value="">No news data available</option>
+              <option value="">ニュースデータがありません</option>
             )}
             {Object.keys(groupedDatetimes).sort((a, b) => b.localeCompare(a)).map((date) => (
               <optgroup key={date} label={date}>
@@ -154,7 +154,7 @@ function App() {
         {loading && (
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="mt-2 text-gray-600">Loading...</p>
+            <p className="mt-2 text-gray-600">読み込み中...</p>
           </div>
         )}
 
@@ -172,19 +172,19 @@ function App() {
             <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <p className="text-gray-600">Keywords</p>
+                  <p className="text-gray-600">キーワード</p>
                   <p className="font-semibold">{newsData.keywords.join(', ')}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">Collected</p>
+                  <p className="text-gray-600">収集数</p>
                   <p className="font-semibold">{newsData.stats.total_collected}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">Unique</p>
+                  <p className="text-gray-600">ユニーク数</p>
                   <p className="font-semibold">{newsData.stats.unique_articles}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">Duplicates</p>
+                  <p className="text-gray-600">重複数</p>
                   <p className="font-semibold">{newsData.stats.duplicate_removed}</p>
                 </div>
               </div>
@@ -194,7 +194,7 @@ function App() {
             <div className="space-y-6">
               {newsData.news.length === 0 && (
                 <p className="text-center text-gray-600 py-12">
-                  No news available for this collection
+                  この収集にはニュースがありません
                 </p>
               )}
               {newsData.news.map((article, index) => (
@@ -234,11 +234,11 @@ function ArticleCard({ article }: { article: FinalNewsItem }) {
       } else {
         const error = await response.json();
         console.error('Feedback failed:', error);
-        alert('Failed to save feedback: ' + (error.error || 'Unknown error'));
+        alert('フィードバックの保存に失敗しました: ' + (error.error || '不明なエラー'));
       }
     } catch (error) {
       console.error('Feedback error:', error);
-      alert('Failed to submit feedback');
+      alert('フィードバックの送信に失敗しました');
     } finally {
       setIsSubmitting(false);
     }
@@ -263,18 +263,18 @@ function ArticleCard({ article }: { article: FinalNewsItem }) {
       } else {
         const error = await response.json();
         console.error('Feedback failed:', error);
-        alert('Failed to save feedback: ' + (error.error || 'Unknown error'));
+        alert('フィードバックの保存に失敗しました: ' + (error.error || '不明なエラー'));
       }
     } catch (error) {
       console.error('Feedback error:', error);
-      alert('Failed to submit feedback');
+      alert('フィードバックの送信に失敗しました');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const formatDate = (isoString: string | null | undefined) => {
-    if (!isoString) return 'Unknown';
+    if (!isoString) return '不明';
     try {
       const date = new Date(isoString);
       return date.toLocaleString('ja-JP', {
@@ -357,7 +357,7 @@ function ArticleCard({ article }: { article: FinalNewsItem }) {
             rel="noopener noreferrer"
             className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
           >
-            Read Article
+            記事を読む
             <svg
               className="ml-2 w-4 h-4"
               fill="none"
@@ -383,9 +383,9 @@ function ArticleCard({ article }: { article: FinalNewsItem }) {
                   ? 'bg-green-100 border-green-600 text-green-700'
                   : 'border-green-600 text-green-600 hover:bg-green-50'
               } disabled:opacity-50 disabled:cursor-not-allowed`}
-              title="This article was helpful"
+              title="この記事は役に立ちました"
             >
-              Good
+              良い
               {feedbackState === 'good' && ' ✓'}
             </button>
             <button
@@ -396,9 +396,9 @@ function ArticleCard({ article }: { article: FinalNewsItem }) {
                   ? 'bg-red-100 border-red-600 text-red-700'
                   : 'border-red-600 text-red-600 hover:bg-red-50'
               } disabled:opacity-50 disabled:cursor-not-allowed`}
-              title="This article was not helpful"
+              title="この記事は役に立ちませんでした"
             >
-              Bad
+              悪い
               {feedbackState === 'bad' && ' ✓'}
             </button>
           </div>
