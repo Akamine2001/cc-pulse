@@ -20,6 +20,7 @@ const GITHUB_REPOSITORY = process.env.GITHUB_REPOSITORY;
 
 if (!ANTHROPIC_API_KEY) {
   console.error('❌ ANTHROPIC_API_KEY is not set');
+  console.error('Note: Set CLAUDE_CODE_OAUTH_TOKEN in GitHub Secrets and it will be passed as ANTHROPIC_API_KEY');
   process.exit(1);
 }
 
@@ -42,7 +43,8 @@ if (!GITHUB_REPOSITORY) {
 const [owner, repo] = GITHUB_REPOSITORY.split('/');
 
 // クライアント初期化
-const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+// Anthropic SDKはデフォルトでANTHROPIC_API_KEY環境変数を自動参照
+const anthropic = new Anthropic();
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
 interface ReviewIssue {
