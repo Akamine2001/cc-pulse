@@ -13,14 +13,13 @@ import { Octokit } from 'octokit';
 import { readFileSync, existsSync } from 'fs';
 
 // 環境変数の検証
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const PR_NUMBER = process.env.PR_NUMBER;
 const GITHUB_REPOSITORY = process.env.GITHUB_REPOSITORY;
 
-if (!ANTHROPIC_API_KEY) {
-  console.error('❌ ANTHROPIC_API_KEY is not set');
-  console.error('Note: Set CLAUDE_CODE_OAUTH_TOKEN in GitHub Secrets and it will be passed as ANTHROPIC_API_KEY');
+if (!CLAUDE_CODE_OAUTH_TOKEN) {
+  console.error('❌ CLAUDE_CODE_OAUTH_TOKEN is not set');
   process.exit(1);
 }
 
@@ -43,8 +42,7 @@ if (!GITHUB_REPOSITORY) {
 const [owner, repo] = GITHUB_REPOSITORY.split('/');
 
 // クライアント初期化
-// Anthropic SDKはデフォルトでANTHROPIC_API_KEY環境変数を自動参照
-const anthropic = new Anthropic();
+const anthropic = new Anthropic({ apiKey: CLAUDE_CODE_OAUTH_TOKEN });
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
 interface ReviewIssue {
