@@ -93,3 +93,53 @@ bun run build
 ```
 
 ビルド成果物は `dist/` に出力されます。
+
+## PR自動レビューシステム
+
+cc-pulseは、GitHub ActionsとClaude APIを使用した自動コードレビューシステムを搭載しています。PRが作成されると、自動的にコードをレビューしてコメントを投稿します。
+
+### 🔧 セットアップ
+
+#### 1. GitHub Secrets 設定
+
+リポジトリの Settings > Secrets and variables > Actions で以下を追加：
+
+| Secret名 | 説明 | 取得方法 |
+|---------|------|---------|
+| `ANTHROPIC_API_KEY` | Claude API Key | [Anthropic Console](https://console.anthropic.com/) |
+| `PERSONAL_ACCESS_TOKEN` | GitHub PAT | [GitHub Settings](https://github.com/settings/tokens) (権限: `repo`, `write:discussion`) |
+
+#### 2. ClaudeCode Hooks 設定（オプション - 推奨）
+
+開発者の `.serena` コンテキストを自動的にGitHub Releasesに同期します。
+
+```bash
+# 1. 設定ファイルをコピー
+cp scripts/claude-settings.sample.json ~/.claude/settings.json
+
+# 2. 同期スクリプトを配置
+mkdir -p ~/scripts
+cp scripts/serena-sync.sh ~/scripts/
+chmod +x ~/scripts/serena-sync.sh
+
+# 3. GitHub CLIが認証済みであることを確認
+gh auth status
+```
+
+これで、ClaudeCodeを起動するたびに自動的に`.serena`ディレクトリがGitHub Releasesに同期されます。
+
+#### 3. 動作確認
+
+PRを作成すると、GitHub Actionsが自動的に起動してレビューを実行します：
+
+1. PR作成者の `.serena` コンテキストを取得（存在する場合）
+2. Claude APIでコードレビュー実施
+3. PRにレビュー結果をコメント投稿
+
+### 📊 実装フェーズ
+
+- **Phase 1（完了）**: 基本的なPRレビュー + ClaudeCode Hooks同期
+- **Phase 2（予定）**: Serena MCP統合 + デグレーションチェック
+- **Phase 3（予定）**: @jules連携 + パフォーマンス最適化
+
+詳細は `docs/PR_REVIEW_SETUP.md` を参照してください。
