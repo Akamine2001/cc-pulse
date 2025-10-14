@@ -15,7 +15,7 @@ peer = false
 
 [test]
 # Test configuration
-preload = ["./tests/setup.ts"]
+# preload = ["./tests/setup.ts"]
 
 [build]
 # Build configuration

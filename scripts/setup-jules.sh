@@ -99,6 +99,9 @@ main() {
     # Generate sample data
     generate_sample_data
 
+    # Build frontend CSS
+    build_frontend_css
+
     # Start web server
     start_web_server
 
@@ -369,9 +372,29 @@ generate_sample_data() {
     cd ..
 }
 
+# Build frontend CSS
+build_frontend_css() {
+    log_step "Step 10.5: Building Frontend CSS"
+
+    log_info "Building Tailwind CSS..."
+    bun run build:css
+
+    CSS_OUTPUT_FILE="src/templates/styles.built.css"
+    if [[ -f "$CSS_OUTPUT_FILE" ]]; then
+        log_success "CSS build complete: $CSS_OUTPUT_FILE"
+    else
+        log_error "CSS build failed. File not found: $CSS_OUTPUT_FILE"
+        return 1
+    fi
+}
+
 # Start web server
 start_web_server() {
     log_step "Step 11: Starting Web Server"
+
+    log_info "Stopping any existing server to prevent port conflicts..."
+    pkill -f 'bun run dev serve' &>/dev/null || true
+    sleep 1 # Give a moment for the port to be released
 
     log_info "Starting web server on http://localhost:5775..."
 
