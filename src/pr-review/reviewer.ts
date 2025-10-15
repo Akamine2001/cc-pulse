@@ -1,9 +1,7 @@
-import { query, tool, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, tool, createSdkMcpServer, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { getClaudeCodeExecutablePath } from '../utils/paths';
 import {
   ReviewResultSchema,
-  ReviewIssueSchema,
-  ReviewStatsSchema,
   type ReviewResult
 } from './schemas';
 
@@ -15,13 +13,13 @@ export class PRReviewer {
   private reviewResult: ReviewResult | null = null;
 
   /**
-   * レビュー結果を提出するツール
+   * レビュー結果を提出するMCPサーバーを作成
    */
-  private createReviewTool() {
-    return tool(
+  private createReviewMcpServer() {
+    const submitReviewTool = tool(
       'submit_review',
-      'Submit the code review results in structured format',
-      ReviewResultSchema.shape,  // Zodスキーマから直接shape を使用
+      'Submit the code review results in structured format with schema validation',
+      ReviewResultSchema.shape,
       async (args) => {
         // ツールが呼ばれた時点で、スキーマに沿ったデータが保証されている
         // statsの整合性チェック（念のため）
@@ -40,10 +38,19 @@ export class PRReviewer {
         };
 
         return {
-          content: [{ type: 'text' as const, text: 'Review submitted successfully' }]
+          content: [{
+            type: 'text' as const,
+            text: `Review submitted successfully. Found ${args.issues.length} issues.`
+          }]
         };
       }
     );
+
+    return createSdkMcpServer({
+      name: 'review-output',
+      version: '1.0.0',
+      tools: [submitReviewTool]
+    });
   }
 
   /**
@@ -77,7 +84,7 @@ export class PRReviewer {
     this.reviewResult = null;
 
     const promptText = this.buildPrompt(diff, projectContext);
-    const reviewTool = this.createReviewTool();
+    const reviewMcpServer = this.createReviewMcpServer();
 
     console.log('🤖 Starting Claude code review with Agent SDK...');
 
@@ -86,22 +93,42 @@ export class PRReviewer {
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
         maxTurns: 5,  // ツール呼び出しを考慮して複数ターン許可
-        allowedTools: [reviewTool]  // レビューツールのみ許可
+        mcpServers: {
+          'review-output': reviewMcpServer  // MCP Serverとして登録
+        },
+        allowedTools: ['mcp__review-output__submit_review']  // MCPツール名で指定
       }
     });
 
     // ストリームを処理（ツールが呼ばれるのを待つ）
+    let hasToolUse = false;
     for await (const message of stream) {
-      // メッセージ処理（ツールが呼ばれると this.reviewResult に保存される）
-      if (message?.type === 'assistant') {
-        // ツール呼び出しの確認
-        if (this.reviewResult) {
-          break; // 結果が取得できたら終了
+      console.log(`[DEBUG] Message type: ${message?.type}`);
+
+      if (message?.type === 'assistant' && message.message?.content) {
+        for (const block of message.message.content) {
+          console.log(`[DEBUG] Content block type: ${block.type}`);
+
+          if (block.type === 'tool_use') {
+            console.log(`[DEBUG] Tool called: ${(block as any).name}`);
+            hasToolUse = true;
+          }
+
+          if (block.type === 'text') {
+            console.log(`[DEBUG] Text content: ${(block as any).text?.substring(0, 200)}`);
+          }
         }
+      }
+
+      // ツール呼び出しの確認
+      if (this.reviewResult) {
+        console.log('[DEBUG] Review result received, breaking loop');
+        break;
       }
     }
 
     if (!this.reviewResult) {
+      console.error(`[DEBUG] Tool was called: ${hasToolUse}`);
       throw new Error('Failed to get review result from Claude (tool was not called)');
     }
 
@@ -131,12 +158,15 @@ ${diff}
 5. **型安全性**: TypeScriptの型定義の適切性
 
 # 結果の提出方法
-レビューが完了したら、**必ず submit_review ツールを使用して結果を提出してください**。
+レビューが完了したら、**必ず mcp__review-output__submit_review ツールを使用して結果を提出してください**。
 
+ツールの引数:
 - issues: 検出された問題のリスト（問題がない場合は空配列）
 - summary: レビュー全体の総評（3-5文で）
 - stats: 問題の統計情報（total_issues, critical, high, medium, low）
 
-**重要**: stats の各カウントは issues の内容と正確に一致させてください。`;
+**重要**:
+- stats の各カウントは issues の内容と正確に一致させてください
+- 必ずツールを呼び出してください（テキストでの返答は不要です）`;
   }
 }

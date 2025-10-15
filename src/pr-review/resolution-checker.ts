@@ -1,4 +1,4 @@
-import { query, tool, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, tool, createSdkMcpServer, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { getClaudeCodeExecutablePath } from '../utils/paths';
 import { IssueResolutionSchema, type IssueResolution, type ReviewIssue } from './schemas';
 
@@ -9,20 +9,29 @@ export class ResolutionChecker {
   private resolutionResult: IssueResolution | null = null;
 
   /**
-   * 修正判定結果を提出するツール
+   * 修正判定結果を提出するMCPサーバーを作成
    */
-  private createResolutionTool() {
-    return tool(
+  private createResolutionMcpServer() {
+    const submitResolutionTool = tool(
       'submit_resolution',
-      'Submit the resolution check result',
+      'Submit the resolution check result with schema validation',
       IssueResolutionSchema.shape,
       async (args) => {
         this.resolutionResult = args as IssueResolution;
         return {
-          content: [{ type: 'text' as const, text: 'Resolution result submitted successfully' }]
+          content: [{
+            type: 'text' as const,
+            text: `Resolution result submitted: ${args.status}`
+          }]
         };
       }
     );
+
+    return createSdkMcpServer({
+      name: 'resolution-output',
+      version: '1.0.0',
+      tools: [submitResolutionTool]
+    });
   }
 
   /**
@@ -58,7 +67,7 @@ export class ResolutionChecker {
     this.resolutionResult = null;
 
     const promptText = this.buildPrompt(previousIssue, originalCode, currentCode, projectContext);
-    const resolutionTool = this.createResolutionTool();
+    const resolutionMcpServer = this.createResolutionMcpServer();
 
     console.log(`🔍 Checking resolution for: ${previousIssue.description.substring(0, 50)}...`);
 
@@ -67,20 +76,36 @@ export class ResolutionChecker {
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
         maxTurns: 5,  // ツール呼び出しを考慮
-        allowedTools: [resolutionTool]
+        mcpServers: {
+          'resolution-output': resolutionMcpServer
+        },
+        allowedTools: ['mcp__resolution-output__submit_resolution']
       }
     });
 
     // ストリームを処理（ツールが呼ばれるのを待つ）
+    let hasToolUse = false;
     for await (const message of stream) {
-      if (message?.type === 'assistant') {
-        if (this.resolutionResult) {
-          break; // 結果が取得できたら終了
+      if (message?.type === 'assistant' && message.message?.content) {
+        for (const block of message.message.content) {
+          if (block.type === 'tool_use') {
+            console.log(`[DEBUG] Resolution tool called: ${(block as any).name}`);
+            hasToolUse = true;
+          }
+
+          if (block.type === 'text') {
+            console.log(`[DEBUG] Resolution text: ${(block as any).text?.substring(0, 200)}`);
+          }
         }
+      }
+
+      if (this.resolutionResult) {
+        break; // 結果が取得できたら終了
       }
     }
 
     if (!this.resolutionResult) {
+      console.error(`[DEBUG] Resolution tool was called: ${hasToolUse}`);
       throw new Error('Failed to get resolution result from Claude (tool was not called)');
     }
 
@@ -141,11 +166,14 @@ ${originalCode ? '上記の「前回指摘した時のコード」と「現在�
 4. **not_fixed**: 上記に該当せず、問題が未解決
 
 # 結果の提出方法
-判定が完了したら、**必ず submit_resolution ツールを使用して結果を提出してください**。
+判定が完了したら、**必ず mcp__resolution-output__submit_resolution ツールを使用して結果を提出してください**。
 
+ツールの引数:
 - status: 判定結果（fixed, todo_added, needs_decision, not_fixed）
 - reasoning: 判定理由を1-2文で簡潔に
-- code_snippet: 該当部分のコード（証拠）
-- owner_mention_needed: needs_decision の場合は true、それ以外は false`;
+- code_snippet: 該当部分のコード（証拠、オプション）
+- owner_mention_needed: needs_decision の場合は true、それ以外は false
+
+**重要**: 必ずツールを呼び出してください（テキストでの返答は不要です）`;
   }
 }
