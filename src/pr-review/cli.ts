@@ -221,8 +221,7 @@ interface CommentState {
  */
 async function handleResolvedIssues(
   currentReviewResult: ReviewResult,
-  context: string,
-  sessionId?: string
+  context: string
 ): Promise<Array<{ file: string; line: number; status: string }>> {
   console.log('');
   console.log('🔍 Checking previous review comments for resolution...');
@@ -319,8 +318,7 @@ async function handleResolvedIssues(
         previousIssue,
         originalCode,
         currentCode,
-        context,
-        sessionId  // セッションIDを渡す
+        context
       );
 
       console.log(`  ${comment.path}:${comment.line} - ${resolution.status}`);
@@ -447,14 +445,8 @@ async function main() {
     const initialReviewResult = await reviewer.review(diff, context);
     console.log(`✅ Initial review completed: ${initialReviewResult.stats.total_issues} issues found`);
 
-    // セッションIDを取得
-    const sessionId = reviewer.getSessionId();
-    if (sessionId) {
-      console.log(`✅ Session ID obtained for resolution checks`);
-    }
-
     // 5. 前回のコメント処理（Resolve判定 + 除外箇所リスト作成）
-    const excludedLocations = await handleResolvedIssues(initialReviewResult, context, sessionId);
+    const excludedLocations = await handleResolvedIssues(initialReviewResult, context);
 
     // ====== Phase B: 新しいレビュー実施（除外箇所を考慮） ======
 

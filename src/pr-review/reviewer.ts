@@ -7,14 +7,6 @@ import { ReviewResultSchema, type ReviewResult } from './schemas';
  * Claude Agent SDKを使用してコードレビューを実施
  */
 export class PRReviewer {
-  private sessionId?: string;
-
-  /**
-   * セッションIDを取得
-   */
-  getSessionId(): string | undefined {
-    return this.sessionId;
-  }
 
   /**
    * PRの差分をレビューして構造化されたレビュー結果を返す
@@ -37,20 +29,13 @@ export class PRReviewer {
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
         maxTurns: 1,  // 単発入力を明示
-        allowedTools: [],  // ツール不要、JSON生成のみ
-        settingSources: []  // CI環境での設定読み込みを無効化
+        allowedTools: []  // ツール不要、JSON生成のみ
       }
     });
 
     // ストリームからレスポンスを収集
     let responseText = '';
     for await (const message of stream) {
-      // セッションIDを取得
-      if (message?.type === 'system' && (message as any).subtype === 'init') {
-        this.sessionId = (message as any).session_id;
-        console.log(`✅ Session ID: ${this.sessionId?.substring(0, 8)}...`);
-      }
-
       if (message?.type === 'assistant' && message.message?.content) {
         for (const block of message.message.content) {
           if (block.type === 'text') {

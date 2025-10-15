@@ -13,8 +13,7 @@ export class ResolutionChecker {
     previousIssue: ReviewIssue,
     originalCode: string | null,
     currentCode: string,
-    projectContext: string,
-    sessionId?: string
+    projectContext: string
   ): Promise<IssueResolution> {
     const claudeCodePath = getClaudeCodeExecutablePath();
     if (!claudeCodePath) {
@@ -30,9 +29,7 @@ export class ResolutionChecker {
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
         maxTurns: 1,  // 単発入力を明示
-        allowedTools: [],
-        settingSources: [],  // CI環境での設定読み込みを無効化
-        ...(sessionId && { resume: sessionId })  // セッションIDがあれば再開
+        allowedTools: []
       }
     });
 
