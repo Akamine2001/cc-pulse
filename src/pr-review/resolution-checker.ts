@@ -28,8 +28,9 @@ export class ResolutionChecker {
       prompt,
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
+        maxTurns: 1,  // 単発入力を明示
         allowedTools: [],
-        continue: true  // 最新の会話を継続（複数回のquery()呼び出しに対応）
+        settingSources: []  // CI環境での設定読み込みを無効化
       }
     });
 
@@ -58,27 +59,22 @@ export class ResolutionChecker {
     projectContext: string
   ): string {
     let prompt = `あなたは前回指摘したレビュー問題が解決されたか判定するレビュアーです。
-
-# プロジェクトコンテキスト
-${projectContext}
-
-# 前回の指摘
-**カテゴリ**: ${previousIssue.category}
-**重要度**: ${previousIssue.severity}
-**説明**: ${previousIssue.description}
-**影響**: ${previousIssue.impact}
-**推奨対応**: ${previousIssue.suggestion}
-
-`;
+    # プロジェクトコンテキスト
+    ${projectContext}
+    # 前回の指摘
+    **カテゴリ**: ${previousIssue.category}
+    **重要度**: ${previousIssue.severity}
+    **説明**: ${previousIssue.description}
+    **影響**: ${previousIssue.impact}
+    **推奨対応**: ${previousIssue.suggestion}`;
 
     // 元のコードがある場合は含める
     if (originalCode) {
-      prompt += `# 前回指摘した時のコード
-\`\`\`
-${originalCode}
-\`\`\`
-
-`;
+          prompt += `# 前回指摘した時のコード
+          \`\`\`
+          ${originalCode}
+          \`\`\`
+        `;
     }
 
     prompt += `# 現在のコード（該当箇所）

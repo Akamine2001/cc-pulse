@@ -27,7 +27,9 @@ export class PRReviewer {
       prompt,
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
-        allowedTools: [] // ツール不要、JSON生成のみ
+        maxTurns: 1,  // 単発入力を明示
+        allowedTools: [],  // ツール不要、JSON生成のみ
+        settingSources: []  // CI環境での設定読み込みを無効化
       }
     });
 
