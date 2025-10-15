@@ -71,7 +71,7 @@ export class ResolutionChecker {
 
     console.log(`🔍 Checking resolution for: ${previousIssue.description.substring(0, 50)}...`);
 
-    // stderrを収集
+    // stderrを収集（注: SDKはstdoutコールバックをサポートしていない）
     let stderrOutput = '';
 
     const stream = query({
@@ -126,15 +126,20 @@ export class ResolutionChecker {
         console.error(`   Error: ${error.message}`);
         console.error(`   Stack: ${error.stack}`);
       }
+
       if (stderrOutput) {
-        console.error(`   Claude Code STDERR:\n${stderrOutput}`);
+        console.error(`   Claude Code STDERR:
+${stderrOutput}`);
       }
       throw error;
     }
 
     if (!this.resolutionResult) {
+      console.error('[ERROR] Failed to get resolution result from Claude (tool was not called)');
+
       if (stderrOutput) {
-        console.error(`[ERROR] Claude Code STDERR output:\n${stderrOutput}`);
+        console.error(`[ERROR] Claude Code STDERR output:
+${stderrOutput}`);
       }
       throw new Error('Failed to get resolution result from Claude (tool was not called)');
     }
@@ -205,5 +210,7 @@ ${originalCode ? '上記の「前回指摘した時のコード」と「現在�
 - owner_mention_needed: needs_decision の場合は true、それ以外は false
 
 **重要**: 必ずツールを呼び出してください（テキストでの返答は不要です）`;
+
+    return prompt;
   }
 }

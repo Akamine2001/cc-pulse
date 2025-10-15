@@ -88,7 +88,7 @@ export class PRReviewer {
 
     console.log('🤖 Starting Claude code review with Agent SDK...');
 
-    // stderrを収集
+    // stderrを収集（注: SDKはstdoutコールバックをサポートしていない）
     let stderrOutput = '';
 
     const stream = query({
@@ -159,14 +159,17 @@ export class PRReviewer {
         console.error(`   Stack: ${error.stack}`);
       }
       if (stderrOutput) {
-        console.error(`   Claude Code STDERR:\n${stderrOutput}`);
+        console.error(`   Claude Code STDERR:
+${stderrOutput}`);
       }
       throw error;
     }
 
     if (!this.reviewResult) {
+      console.error('[ERROR] Failed to get review result from Claude (tool was not called)');
       if (stderrOutput) {
-        console.error(`[ERROR] Claude Code STDERR output:\n${stderrOutput}`);
+        console.error(`[ERROR] Claude Code STDERR output:
+${stderrOutput}`);
       }
       throw new Error('Failed to get review result from Claude (tool was not called)');
     }

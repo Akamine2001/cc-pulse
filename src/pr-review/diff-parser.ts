@@ -52,7 +52,13 @@ export class DiffParser {
         })
         .join('\n');
     } catch (error) {
-      console.error(`❌ Failed to read file ${filePath}:`, error);
+      console.error(`❌ Failed to read file ${filePath}`);
+      if (error instanceof Error) {
+        console.error(`   Error: ${error.message}`);
+        console.error(`   Error code: ${(error as any).code}`);
+      } else {
+        console.error(`   Error:`, error);
+      }
       return `[ファイル読み込みエラー: ${filePath}]`;
     }
   }
@@ -85,7 +91,13 @@ export class DiffParser {
         })
         .join('\n');
     } catch (error) {
-      console.error(`❌ Failed to read file ${filePath}:`, error);
+      console.error(`❌ Failed to read file ${filePath}`);
+      if (error instanceof Error) {
+        console.error(`   Error: ${error.message}`);
+        console.error(`   Error code: ${(error as any).code}`);
+      } else {
+        console.error(`   Error:`, error);
+      }
       return `[ファイル読み込みエラー: ${filePath}]`;
     }
   }

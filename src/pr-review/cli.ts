@@ -324,13 +324,16 @@ async function handleResolvedIssues(
     } catch (error) {
       console.error(`❌ Failed to check comment ${comment.id}`);
       console.error(`   Comment: ${comment.path}:${comment.line}`);
+      console.error(`   Comment body preview: ${comment.body.substring(0, 100)}...`);
       if (error instanceof Error) {
         console.error(`   Error: ${error.message}`);
+        console.error(`   Error name: ${error.name}`);
         console.error(`   Stack: ${error.stack}`);
       } else {
         console.error(`   Error:`, error);
       }
-      // エラーがあっても続行
+      // エラーがあっても続行（他のコメントの処理を継続）
+      console.log('⚠️ Continuing with next comment...');
     }
   }
 
