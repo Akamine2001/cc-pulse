@@ -47,3 +47,27 @@ export const ReviewResultSchema = z.object({
 });
 
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
+
+/**
+ * 修正判定のステータス
+ */
+export const ResolutionStatusSchema = z.enum([
+  'fixed',              // 修正済み
+  'todo_added',         // TODO記載
+  'needs_decision',     // 方針質問
+  'not_fixed'          // 未修正
+]);
+
+export type ResolutionStatus = z.infer<typeof ResolutionStatusSchema>;
+
+/**
+ * 問題の修正判定結果
+ */
+export const IssueResolutionSchema = z.object({
+  status: ResolutionStatusSchema,
+  reasoning: z.string().describe('判定理由'),
+  code_snippet: z.string().optional().describe('該当コード（証拠）'),
+  owner_mention_needed: z.boolean().describe('オーナーメンションが必要か')
+});
+
+export type IssueResolution = z.infer<typeof IssueResolutionSchema>;

@@ -50,6 +50,21 @@ function formatIssue(issue: ReviewIssue): string {
 }
 
 /**
+ * 個別の問題をインラインコメント用にフォーマット
+ */
+export function formatIssueAsInlineComment(issue: ReviewIssue): string {
+  const emoji = getSeverityEmoji(issue.severity);
+  const label = getSeverityLabel(issue.severity);
+
+  return `${emoji} **[${label}] ${issue.category}**: ${issue.description}
+
+**影響**: ${issue.impact}
+**推奨対応**: ${issue.suggestion}
+
+🤖 Auto-Review`;
+}
+
+/**
  * レビュー結果をMarkdown形式でフォーマット
  */
 export function formatReviewAsMarkdown(result: ReviewResult): string {
