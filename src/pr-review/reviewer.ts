@@ -101,34 +101,50 @@ export class PRReviewer {
     });
 
     // ストリームを処理（ツールが呼ばれるのを待つ）
-    let hasToolUse = false;
     for await (const message of stream) {
-      console.log(`[DEBUG] Message type: ${message?.type}`);
-
       if (message?.type === 'assistant' && message.message?.content) {
         for (const block of message.message.content) {
-          console.log(`[DEBUG] Content block type: ${block.type}`);
-
           if (block.type === 'tool_use') {
-            console.log(`[DEBUG] Tool called: ${(block as any).name}`);
-            hasToolUse = true;
+            const toolUse = block as any;
+            console.log(`[DEBUG] Tool called: ${toolUse.name}`);
+
+            // submit_reviewツールが呼ばれたら、inputから結果を取得
+            if (toolUse.name === 'mcp__review-output__submit_review') {
+              // ツールのinputがスキーマ検証済みのデータ
+              const actualStats = {
+                total_issues: toolUse.input.issues.length,
+                critical: toolUse.input.issues.filter((i: any) => i.severity === 'critical').length,
+                high: toolUse.input.issues.filter((i: any) => i.severity === 'high').length,
+                medium: toolUse.input.issues.filter((i: any) => i.severity === 'medium').length,
+                low: toolUse.input.issues.filter((i: any) => i.severity === 'low').length
+              };
+
+              this.reviewResult = {
+                issues: toolUse.input.issues,
+                summary: toolUse.input.summary,
+                stats: actualStats
+              };
+
+              console.log(`[DEBUG] Review result captured: ${this.reviewResult.issues.length} issues`);
+            }
           }
 
           if (block.type === 'text') {
-            console.log(`[DEBUG] Text content: ${(block as any).text?.substring(0, 200)}`);
+            const text = (block as any).text;
+            if (text && text.trim()) {
+              console.log(`[DEBUG] Text: ${text.substring(0, 200)}`);
+            }
           }
         }
       }
 
-      // ツール呼び出しの確認
+      // 結果取得完了したらループを抜ける
       if (this.reviewResult) {
-        console.log('[DEBUG] Review result received, breaking loop');
         break;
       }
     }
 
     if (!this.reviewResult) {
-      console.error(`[DEBUG] Tool was called: ${hasToolUse}`);
       throw new Error('Failed to get review result from Claude (tool was not called)');
     }
 

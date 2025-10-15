@@ -84,17 +84,25 @@ export class ResolutionChecker {
     });
 
     // ストリームを処理（ツールが呼ばれるのを待つ）
-    let hasToolUse = false;
     for await (const message of stream) {
       if (message?.type === 'assistant' && message.message?.content) {
         for (const block of message.message.content) {
           if (block.type === 'tool_use') {
-            console.log(`[DEBUG] Resolution tool called: ${(block as any).name}`);
-            hasToolUse = true;
+            const toolUse = block as any;
+            console.log(`[DEBUG] Resolution tool called: ${toolUse.name}`);
+
+            // submit_resolutionツールが呼ばれたら、inputから結果を取得
+            if (toolUse.name === 'mcp__resolution-output__submit_resolution') {
+              this.resolutionResult = toolUse.input as IssueResolution;
+              console.log(`[DEBUG] Resolution result captured: ${this.resolutionResult.status}`);
+            }
           }
 
           if (block.type === 'text') {
-            console.log(`[DEBUG] Resolution text: ${(block as any).text?.substring(0, 200)}`);
+            const text = (block as any).text;
+            if (text && text.trim()) {
+              console.log(`[DEBUG] Resolution text: ${text.substring(0, 200)}`);
+            }
           }
         }
       }
@@ -105,7 +113,6 @@ export class ResolutionChecker {
     }
 
     if (!this.resolutionResult) {
-      console.error(`[DEBUG] Resolution tool was called: ${hasToolUse}`);
       throw new Error('Failed to get resolution result from Claude (tool was not called)');
     }
 
