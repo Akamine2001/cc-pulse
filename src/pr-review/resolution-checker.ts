@@ -155,9 +155,15 @@ ${originalCode ? '上記の「前回指摘した時のコード」と「現在�
 
       return validatedResult;
     } catch (error) {
-      console.error('❌ Failed to parse resolution response:', error);
-      console.error('Response text:', responseText);
-      throw new Error(`Failed to parse resolution response: ${error}`);
+      console.error('❌ Failed to parse resolution response');
+      if (error instanceof Error) {
+        console.error(`   Error: ${error.message}`);
+        console.error(`   Stack: ${error.stack}`);
+      } else {
+        console.error(`   Error:`, error);
+      }
+      console.error('   Response text:', responseText.substring(0, 500));
+      throw new Error(`Failed to parse resolution response: ${error instanceof Error ? error.message : error}`);
     }
   }
 }

@@ -169,7 +169,15 @@ async function postInlineComments(reviewResult: ReviewResult, headSha: string): 
       console.log(`  ✅ ${issue.file_path}:${issue.line_range!.end}`);
       successCount++;
     } catch (error: any) {
-      console.error(`  ❌ Failed to post comment on ${issue.file_path}:${issue.line_range?.end}: ${error.message}`);
+      console.error(`  ❌ Failed to post comment on ${issue.file_path}:${issue.line_range?.end}`);
+      if (error instanceof Error) {
+        console.error(`     Error: ${error.message}`);
+        if (error.stack) {
+          console.error(`     Stack: ${error.stack.split('\n').slice(0, 3).join('\n')}`);
+        }
+      } else {
+        console.error(`     Error:`, error);
+      }
       failCount++;
     }
   }
@@ -278,25 +286,7 @@ async function handleResolvedIssues(
         continue;
       }
 
-      // 今回のレビューで同じ問題が検出されたか（内容ベース比較）
-      const stillExists = currentReviewResult.issues.some(curr =>
-        curr.file_path === comment.path &&
-        curr.category === previousIssueData.category
-      );
-
-      if (stillExists) {
-        // まだ問題が残っている → スキップ（新しいレビューで指摘される）
-        commentStates.push({
-          comment,
-          status: 'not_fixed',
-          threadId: threadMap.get(comment.id),
-          message: ''
-        });
-        console.log(`  ${comment.path}:${comment.line} - not_fixed (still detected in new review)`);
-        continue;
-      }
-
-      // 問題が消えた → Claudeで確認
+      // カテゴリ判定は行わず、全てのコメントについてClaude AIで現在の状態を確認
       const previousIssue: ReviewIssue = {
         severity: previousIssueData.severity as any,
         category: previousIssueData.category,
@@ -314,6 +304,8 @@ async function handleResolvedIssues(
         comment.line || 1
       );
 
+      console.log(`🔍 Checking resolution for: ${previousIssue.description.substring(0, 50)}...`);
+
       const resolution = await checker.checkResolution(
         previousIssue,
         originalCode,
@@ -330,7 +322,14 @@ async function handleResolvedIssues(
         message: resolution.reasoning
       });
     } catch (error) {
-      console.error(`❌ Failed to check comment ${comment.id}:`, error);
+      console.error(`❌ Failed to check comment ${comment.id}`);
+      console.error(`   Comment: ${comment.path}:${comment.line}`);
+      if (error instanceof Error) {
+        console.error(`   Error: ${error.message}`);
+        console.error(`   Stack: ${error.stack}`);
+      } else {
+        console.error(`   Error:`, error);
+      }
       // エラーがあっても続行
     }
   }
@@ -389,7 +388,15 @@ async function handleResolvedIssues(
           break;
       }
     } catch (error) {
-      console.error(`❌ Failed to process comment ${state.comment.id}:`, error);
+      console.error(`❌ Failed to process comment ${state.comment.id}`);
+      console.error(`   Comment: ${state.comment.path}:${state.comment.line}`);
+      console.error(`   Status: ${state.status}`);
+      if (error instanceof Error) {
+        console.error(`   Error: ${error.message}`);
+        console.error(`   Stack: ${error.stack}`);
+      } else {
+        console.error(`   Error:`, error);
+      }
     }
   }
 
@@ -474,18 +481,31 @@ async function main() {
     }
 
   } catch (error) {
-    console.error('❌ Review process failed:', error);
+    console.error('❌ Review process failed');
+    if (error instanceof Error) {
+      console.error(`   Error: ${error.message}`);
+      console.error(`   Stack: ${error.stack}`);
+    } else {
+      console.error(`   Error:`, error);
+    }
 
     // エラー時はGitHubにコメント投稿を試みる
     try {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error && error.stack ? `\n\nStack trace:\n${error.stack}` : '';
       await octokit.rest.issues.createComment({
         owner,
         repo,
         issue_number: parseInt(env.PR_NUMBER),
-        body: `⚠️ 自動レビューでエラーが発生しました。\n\n\`\`\`\n${error}\n\`\`\``,
+        body: `⚠️ 自動レビューでエラーが発生しました。\n\n\`\`\`\n${errorMessage}${errorStack}\n\`\`\``,
       });
     } catch (commentError) {
-      console.error('❌ Failed to post error comment:', commentError);
+      console.error('❌ Failed to post error comment');
+      if (commentError instanceof Error) {
+        console.error(`   Error: ${commentError.message}`);
+      } else {
+        console.error(`   Error:`, commentError);
+      }
     }
 
     process.exit(1);

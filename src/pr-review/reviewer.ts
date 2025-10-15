@@ -155,9 +155,15 @@ ${diff}
 
       return validatedResult;
     } catch (error) {
-      console.error('❌ Failed to parse review response:', error);
-      console.error('Response text:', responseText);
-      throw new Error(`Failed to parse review response: ${error}`);
+      console.error('❌ Failed to parse review response');
+      if (error instanceof Error) {
+        console.error(`   Error: ${error.message}`);
+        console.error(`   Stack: ${error.stack}`);
+      } else {
+        console.error(`   Error:`, error);
+      }
+      console.error('   Response text:', responseText.substring(0, 500));
+      throw new Error(`Failed to parse review response: ${error instanceof Error ? error.message : error}`);
     }
   }
 }
