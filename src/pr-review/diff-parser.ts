@@ -4,6 +4,59 @@ import { readFileSync } from 'fs';
  * PR差分から該当箇所のコードを取得
  */
 export class DiffParser {
+  private readonly MAX_SNIPPET_LINES = 30; // コメントに含める最大行数
+
+  /**
+   * コメント用のコードスニペットを整形（長い場合は省略）
+   */
+  formatCodeSnippet(
+    filePath: string,
+    lineStart: number,
+    lineEnd: number
+  ): string {
+    const totalLines = lineEnd - lineStart + 1;
+
+    if (totalLines <= this.MAX_SNIPPET_LINES) {
+      // 全行表示
+      return this.getCodeLines(filePath, lineStart, lineEnd);
+    } else {
+      // 先頭10行 + ... + 末尾10行
+      const headLines = 10;
+      const tailLines = 10;
+      const head = this.getCodeLines(filePath, lineStart, lineStart + headLines - 1);
+      const tail = this.getCodeLines(filePath, lineEnd - tailLines + 1, lineEnd);
+      const omitted = totalLines - headLines - tailLines;
+
+      return `${head}\n...\n... (${omitted} lines omitted) ...\n...\n${tail}`;
+    }
+  }
+
+  /**
+   * 指定範囲のコードを行番号付きで取得
+   */
+  private getCodeLines(
+    filePath: string,
+    lineStart: number,
+    lineEnd: number
+  ): string {
+    try {
+      const fileContent = readFileSync(filePath, 'utf-8');
+      const lines = fileContent.split('\n');
+
+      const codeLines = lines.slice(lineStart - 1, lineEnd);
+
+      return codeLines
+        .map((line, index) => {
+          const lineNumber = lineStart + index;
+          return `${lineNumber.toString().padStart(4)}: ${line}`;
+        })
+        .join('\n');
+    } catch (error) {
+      console.error(`❌ Failed to read file ${filePath}:`, error);
+      return `[ファイル読み込みエラー: ${filePath}]`;
+    }
+  }
+
   /**
    * 指定されたファイル・行範囲の現在のコードを取得
    */
@@ -70,5 +123,23 @@ export class DiffParser {
       category: category.trim(),
       severity: severityMap[severityLabel] || 'medium'
     };
+  }
+
+  /**
+   * コメント本文から該当コードスニペットを抽出
+   */
+  extractCodeSnippetFromComment(commentBody: string): string | null {
+    // コメント形式の例:
+    // **該当コード**:
+    // ```typescript
+    // 100: const apiKey = "hardcoded-key";
+    // ```
+
+    const match = commentBody.match(/\*\*該当コード\*\*:\s*```(?:typescript|javascript|python|)?\s*\n([\s\S]*?)```/);
+    if (!match) {
+      return null;
+    }
+
+    return match[1].trim();
   }
 }

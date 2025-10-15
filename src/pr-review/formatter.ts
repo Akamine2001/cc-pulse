@@ -52,16 +52,22 @@ function formatIssue(issue: ReviewIssue): string {
 /**
  * 個別の問題をインラインコメント用にフォーマット
  */
-export function formatIssueAsInlineComment(issue: ReviewIssue): string {
+export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: string): string {
   const emoji = getSeverityEmoji(issue.severity);
   const label = getSeverityLabel(issue.severity);
 
-  return `${emoji} **[${label}] ${issue.category}**: ${issue.description}
+  let markdown = `${emoji} **[${label}] ${issue.category}**: ${issue.description}\n`;
 
-**影響**: ${issue.impact}
-**推奨対応**: ${issue.suggestion}
+  // コードスニペットがある場合は含める
+  if (codeSnippet) {
+    markdown += `\n**該当コード**:\n\`\`\`typescript\n${codeSnippet}\n\`\`\`\n`;
+  }
 
-🤖 Auto-Review`;
+  markdown += `\n**影響**: ${issue.impact}`;
+  markdown += `\n**推奨対応**: ${issue.suggestion}`;
+  markdown += `\n\n🤖 Auto-Review`;
+
+  return markdown;
 }
 
 /**

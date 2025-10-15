@@ -14,39 +14,16 @@ import { ResolutionChecker } from './resolution-checker';
 import { ThreadResolver } from './thread-resolver';
 import { DiffParser } from './diff-parser';
 import type { ReviewIssue, ReviewResult } from './schemas';
+import { validateEnv } from './env';
 
-// 環境変数の検証
-const CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const PR_NUMBER = process.env.PR_NUMBER;
-const GITHUB_REPOSITORY = process.env.GITHUB_REPOSITORY;
-const PR_AUTHOR = process.env.PR_AUTHOR;
-
-if (!CLAUDE_CODE_OAUTH_TOKEN) {
-  console.error('❌ CLAUDE_CODE_OAUTH_TOKEN is not set');
-  process.exit(1);
-}
-
-if (!GITHUB_TOKEN) {
-  console.error('❌ GITHUB_TOKEN is not set');
-  process.exit(1);
-}
-
-if (!PR_NUMBER) {
-  console.error('❌ PR_NUMBER is not set');
-  process.exit(1);
-}
-
-if (!GITHUB_REPOSITORY) {
-  console.error('❌ GITHUB_REPOSITORY is not set');
-  process.exit(1);
-}
+// 環境変数の検証（Zodバリデーション）
+const env = validateEnv();
 
 // GitHub リポジトリ情報の解析
-const [owner, repo] = GITHUB_REPOSITORY.split('/');
+const [owner, repo] = env.GITHUB_REPOSITORY.split('/');
 
 // Octokit クライアント初期化
-const octokit = new Octokit({ auth: GITHUB_TOKEN });
+const octokit = new Octokit({ auth: env.GITHUB_TOKEN });
 
 /**
  * PR差分を読み込む
@@ -83,7 +60,7 @@ async function getLatestCommitSha(): Promise<string> {
   const pr = await octokit.rest.pulls.get({
     owner,
     repo,
-    pull_number: parseInt(PR_NUMBER!)
+    pull_number: parseInt(env.PR_NUMBER)
   });
 
   return pr.data.head.sha;
@@ -117,16 +94,29 @@ async function postInlineComments(reviewResult: ReviewResult, headSha: string): 
   let successCount = 0;
   let failCount = 0;
 
+  // コードスニペット生成用のparserを初期化
+  const snippetParser = new DiffParser();
+
   for (const issue of criticalIssues) {
     try {
+      // コードスニペットを生成
+      let codeSnippet: string | undefined;
+      if (issue.file_path && issue.line_range) {
+        codeSnippet = snippetParser.formatCodeSnippet(
+          issue.file_path,
+          issue.line_range.start,
+          issue.line_range.end
+        );
+      }
+
       await octokit.rest.pulls.createReviewComment({
         owner,
         repo,
-        pull_number: parseInt(PR_NUMBER!),
+        pull_number: parseInt(env.PR_NUMBER),
         commit_id: headSha,
         path: issue.file_path!,
         line: issue.line_range!.end,
-        body: formatIssueAsInlineComment(issue)
+        body: formatIssueAsInlineComment(issue, codeSnippet)
       });
 
       console.log(`  ✅ ${issue.file_path}:${issue.line_range!.end}`);
@@ -161,7 +151,7 @@ _このレビューはClaude Agent SDK${existsSync('.serena/memories/project_ove
     await octokit.rest.issues.createComment({
       owner,
       repo,
-      issue_number: parseInt(PR_NUMBER!),
+      issue_number: parseInt(env.PR_NUMBER),
       body,
     });
 
@@ -183,36 +173,46 @@ async function handleOutdatedComments(context: string): Promise<void> {
   const previousComments = await octokit.rest.pulls.listReviewComments({
     owner,
     repo,
-    pull_number: parseInt(PR_NUMBER!)
+    pull_number: parseInt(env.PR_NUMBER)
   });
 
   // 2. Outdatedコメント抽出（自動レビューのコメントのみ）
-  const outdatedComments = previousComments.data.filter(
+  const allOutdatedComments = previousComments.data.filter(
     c => c.body.includes('🤖 Auto-Review') && c.position === null
   );
 
-  if (outdatedComments.length === 0) {
+  if (allOutdatedComments.length === 0) {
     console.log('✅ No outdated comments to check');
     return;
   }
 
-  console.log(`📋 Found ${outdatedComments.length} outdated comments to check`);
+  // 上限設定: 最大50件まで処理、5件ずつ並列実行（GitHub Actions timeout & API Rate Limit対策）
+  const MAX_OUTDATED_COMMENTS = 50;
+  const BATCH_SIZE = 5; // 同時実行数
+  const outdatedComments = allOutdatedComments.slice(0, MAX_OUTDATED_COMMENTS);
+
+  if (allOutdatedComments.length > MAX_OUTDATED_COMMENTS) {
+    console.log(`⚠️ Found ${allOutdatedComments.length} outdated comments, processing first ${MAX_OUTDATED_COMMENTS} in batches of ${BATCH_SIZE}`);
+  } else {
+    console.log(`📋 Found ${outdatedComments.length} outdated comments to check (batches of ${BATCH_SIZE})`);
+  }
 
   // 3. GraphQL threadIdマッピング
   const resolver = new ThreadResolver(octokit);
-  const threadMap = await resolver.buildThreadMap(owner, repo, parseInt(PR_NUMBER!));
+  const threadMap = await resolver.buildThreadMap(owner, repo, parseInt(env.PR_NUMBER));
 
-  // 4. 各コメントの修正判定
+  // 4. 各コメントの修正判定（バッチ並列処理）
   const checker = new ResolutionChecker();
   const parser = new DiffParser();
 
-  for (const comment of outdatedComments) {
+  // コメント処理関数
+  const processComment = async (comment: typeof outdatedComments[0]) => {
     try {
       // 前回の問題を抽出
       const previousIssueData = parser.extractIssueFromComment(comment.body);
       if (!previousIssueData) {
         console.log(`⚠️ Could not parse issue from comment ${comment.id}`);
-        continue;
+        return { success: false, commentId: comment.id };
       }
 
       // ReviewIssueオブジェクトを構築
@@ -226,6 +226,9 @@ async function handleOutdatedComments(context: string): Promise<void> {
         suggestion: ''
       };
 
+      // 前回指摘した時のコードスニペットを抽出
+      const originalCode = parser.extractCodeSnippetFromComment(comment.body);
+
       // 該当箇所の現在のコードを取得
       const currentCode = await parser.getCurrentCode(
         comment.path,
@@ -233,9 +236,10 @@ async function handleOutdatedComments(context: string): Promise<void> {
         comment.line || 1
       );
 
-      // Claude SDKで判定
+      // Claude SDKで判定（元のコードと現在のコードを比較）
       const resolution = await checker.checkResolution(
         previousIssue,
+        originalCode,
         currentCode,
         context
       );
@@ -254,7 +258,7 @@ async function handleOutdatedComments(context: string): Promise<void> {
           await octokit.rest.pulls.createReplyForReviewComment({
             owner,
             repo,
-            pull_number: parseInt(PR_NUMBER!),
+            pull_number: parseInt(env.PR_NUMBER),
             comment_id: comment.id,
             body: `✅ 修正を確認しました\n\n${resolution.reasoning}`
           });
@@ -268,7 +272,7 @@ async function handleOutdatedComments(context: string): Promise<void> {
           await octokit.rest.pulls.createReplyForReviewComment({
             owner,
             repo,
-            pull_number: parseInt(PR_NUMBER!),
+            pull_number: parseInt(env.PR_NUMBER),
             comment_id: comment.id,
             body: `✅ TODOとして記録されました\n\n${resolution.reasoning}`
           });
@@ -279,9 +283,9 @@ async function handleOutdatedComments(context: string): Promise<void> {
           await octokit.rest.pulls.createReplyForReviewComment({
             owner,
             repo,
-            pull_number: parseInt(PR_NUMBER!),
+            pull_number: parseInt(env.PR_NUMBER),
             comment_id: comment.id,
-            body: `@${PR_AUTHOR || owner} こちらの判断をお願いします\n\n${resolution.reasoning}`
+            body: `@${env.PR_AUTHOR || owner} こちらの判断をお願いします\n\n${resolution.reasoning}`
           });
           break;
 
@@ -290,19 +294,44 @@ async function handleOutdatedComments(context: string): Promise<void> {
           await octokit.rest.pulls.createReplyForReviewComment({
             owner,
             repo,
-            pull_number: parseInt(PR_NUMBER!),
+            pull_number: parseInt(env.PR_NUMBER),
             comment_id: comment.id,
             body: `⚠️ 問題は解決されていません\n\n${resolution.reasoning}`
           });
           break;
       }
+
+      return { success: true, commentId: comment.id };
     } catch (error) {
       console.error(`❌ Failed to check comment ${comment.id}:`, error);
-      // エラーがあっても続行
+      return { success: false, commentId: comment.id, error };
     }
+  };
+
+  // バッチ処理: 5件ずつ並列実行
+  let totalSuccess = 0;
+  let totalFail = 0;
+
+  for (let i = 0; i < outdatedComments.length; i += BATCH_SIZE) {
+    const batch = outdatedComments.slice(i, i + BATCH_SIZE);
+    const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(outdatedComments.length / BATCH_SIZE);
+
+    console.log(`🔄 Processing batch ${batchNumber}/${totalBatches} (${batch.length} comments)...`);
+
+    const batchPromises = batch.map(comment => processComment(comment));
+    const results = await Promise.allSettled(batchPromises);
+
+    const successCount = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+    const failCount = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)).length;
+
+    totalSuccess += successCount;
+    totalFail += failCount;
+
+    console.log(`  ✅ Batch ${batchNumber} completed: ${successCount} succeeded, ${failCount} failed`);
   }
 
-  console.log('✅ Outdated comments check completed');
+  console.log(`✅ All outdated comments processed: ${totalSuccess} succeeded, ${totalFail} failed`);
 }
 
 /**
@@ -310,8 +339,8 @@ async function handleOutdatedComments(context: string): Promise<void> {
  */
 async function main() {
   console.log('🚀 cc-pulse PR Auto-Review (Phase 1.5)');
-  console.log(`📋 Repository: ${GITHUB_REPOSITORY}`);
-  console.log(`🔢 PR Number: ${PR_NUMBER}`);
+  console.log(`📋 Repository: ${env.GITHUB_REPOSITORY}`);
+  console.log(`🔢 PR Number: ${env.PR_NUMBER}`);
   console.log('');
 
   try {
@@ -365,7 +394,7 @@ async function main() {
       await octokit.rest.issues.createComment({
         owner,
         repo,
-        issue_number: parseInt(PR_NUMBER!),
+        issue_number: parseInt(env.PR_NUMBER),
         body: `⚠️ 自動レビューでエラーが発生しました。\n\n\`\`\`\n${error}\n\`\`\``,
       });
     } catch (commentError) {

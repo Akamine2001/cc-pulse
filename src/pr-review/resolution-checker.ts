@@ -11,6 +11,7 @@ export class ResolutionChecker {
    */
   async checkResolution(
     previousIssue: ReviewIssue,
+    originalCode: string | null,
     currentCode: string,
     projectContext: string
   ): Promise<IssueResolution> {
@@ -19,7 +20,7 @@ export class ResolutionChecker {
       throw new Error('Claude Code CLI not found');
     }
 
-    const prompt = this.buildPrompt(previousIssue, currentCode, projectContext);
+    const prompt = this.buildPrompt(previousIssue, originalCode, currentCode, projectContext);
 
     console.log(`🔍 Checking resolution for: ${previousIssue.description.substring(0, 50)}...`);
 
@@ -51,10 +52,11 @@ export class ResolutionChecker {
    */
   private buildPrompt(
     previousIssue: ReviewIssue,
+    originalCode: string | null,
     currentCode: string,
     projectContext: string
   ): string {
-    return `あなたは前回指摘したレビュー問題が解決されたか判定するレビュアーです。
+    let prompt = `あなたは前回指摘したレビュー問題が解決されたか判定するレビュアーです。
 
 # プロジェクトコンテキスト
 ${projectContext}
@@ -66,10 +68,24 @@ ${projectContext}
 **影響**: ${previousIssue.impact}
 **推奨対応**: ${previousIssue.suggestion}
 
-# 現在のコード（該当箇所）
+`;
+
+    // 元のコードがある場合は含める
+    if (originalCode) {
+      prompt += `# 前回指摘した時のコード
+\`\`\`
+${originalCode}
+\`\`\`
+
+`;
+    }
+
+    prompt += `# 現在のコード（該当箇所）
 \`\`\`
 ${currentCode}
 \`\`\`
+
+${originalCode ? '上記の「前回指摘した時のコード」と「現在のコード」を比較して、問題が修正されたか判定してください。' : ''}
 
 # 判定基準
 以下のいずれかに該当するか判定してください：

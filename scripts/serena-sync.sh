@@ -20,6 +20,9 @@ if [ -d "${PROJECT_DIR}/.serena" ]; then
     # 一時ファイル作成
     TEMP_FILE="/tmp/serena-${USERNAME}-$(date +%s).tar.gz"
 
+    # エラー時・終了時に一時ファイルを確実にクリーンアップ
+    trap 'rm -f "${TEMP_FILE}"' EXIT ERR
+
     # .serenaディレクトリ全体をアーカイブ
     echo "[$(date)] Creating archive: ${TEMP_FILE}"
     tar -czf "${TEMP_FILE}" -C "${PROJECT_DIR}" .serena
