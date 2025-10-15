@@ -386,8 +386,39 @@ async function handleResolvedIssues(
           console.log(`  ⚠️ Needs decision: ${state.comment.path}:${state.comment.line}`);
           break;
 
+        case 'implementation_changed':
+          // 実装が大幅変更 → Resolve + 返信
+          if (state.threadId) {
+            await resolver.resolveThread(state.threadId);
+          }
+          await octokit.rest.pulls.createReplyForReviewComment({
+            owner,
+            repo,
+            pull_number: parseInt(env.PR_NUMBER),
+            comment_id: state.comment.id,
+            body: `✅ 実装が大幅に変更されました
+
+${state.message}
+
+前回の指摘は無効になりました。新しい実装に問題があれば別途レビューでお知らせします。`
+          });
+          console.log(`  ✅ Resolved (implementation changed): ${state.comment.path}:${state.comment.line}`);
+          break;
+
         case 'not_fixed':
-          // 何もしない（新しいレビューで再度指摘される）
+          // 未修正の理由を説明して対応を催促
+          await octokit.rest.pulls.createReplyForReviewComment({
+            owner,
+            repo,
+            pull_number: parseInt(env.PR_NUMBER),
+            comment_id: state.comment.id,
+            body: `⚠️ まだ修正されていません
+
+**理由**: ${state.message}
+
+引き続き対応をお願いします 🙏`
+          });
+          console.log(`  ⚠️ Not fixed (reminded): ${state.comment.path}:${state.comment.line}`);
           break;
       }
     } catch (error) {

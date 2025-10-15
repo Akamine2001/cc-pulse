@@ -52,11 +52,12 @@ export type ReviewResult = z.infer<typeof ReviewResultSchema>;
  * 修正判定のステータス
  */
 export const ResolutionStatusSchema = z.enum([
-  'fixed',              // 修正済み
-  'todo_added',         // TODO記載
-  'needs_decision',     // 方針質問
-  'not_fixed'          // 未修正
-]);
+  'fixed',                    // 修正済み
+  'todo_added',               // TODO記載
+  'needs_decision',           // 方針質問
+  'implementation_changed',   // 実装が大幅に変更され、前回の指摘が無効
+  'not_fixed'                 // 未修正
+]);;
 
 export type ResolutionStatus = z.infer<typeof ResolutionStatusSchema>;
 

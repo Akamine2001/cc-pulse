@@ -198,14 +198,28 @@ ${originalCode ? '上記の「前回指摘した時のコード」と「現在�
    - 例: // この対応で良いか確認してください
    - この場合、owner_mention_neededをtrueにしてください
 
-4. **not_fixed**: 上記に該当せず、問題が未解決
+4. **implementation_changed**: 該当箇所の実装が大幅に変更され、前回の指摘が無効になった
+   - コードが完全に書き換えられている
+   - 指摘された関数やクラスが削除されている
+   - アーキテクチャが変わり、前回の問題が該当しなくなった
+   - **重要**: この場合は古いスレッドをResolveします。新しい実装に問題があれば別途新しいレビューで指摘されます
+
+5. **not_fixed**: 上記に該当せず、問題が未解決
 
 # 結果の提出方法
 判定が完了したら、**必ず mcp__resolution-output__submit_resolution ツールを使用して結果を提出してください**。
 
 ツールの引数:
-- status: 判定結果（fixed, todo_added, needs_decision, not_fixed）
-- reasoning: 判定理由を1-2文で簡潔に
+- status: 判定結果（fixed, todo_added, needs_decision, implementation_changed, not_fixed）
+- reasoning: 判定理由（以下のガイドラインに従う）
+  - **fixed/todo_added/needs_decision**: 1-2文で簡潔に
+  - **implementation_changed**: 実装がどのように変わったか簡潔に説明
+    * 例: "該当するhandleError関数が完全に削除され、新しいエラーハンドリングアーキテクチャに置き換えられました。"
+  - **not_fixed**: より詳しく説明し、以下を含める
+    * 何が修正されていないか
+    * なぜ問題が残っているのか
+    * （可能であれば）どうすれば修正できるか
+    * 例: "環境変数の型チェックが依然として不足しています。process.envの値はundefinedになる可能性があるため、使用前に必ず存在確認を行い、型ガードを追加してください。"
 - code_snippet: 該当部分のコード（証拠、オプション）
 - owner_mention_needed: needs_decision の場合は true、それ以外は false
 
