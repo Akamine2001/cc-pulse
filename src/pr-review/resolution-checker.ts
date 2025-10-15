@@ -28,7 +28,8 @@ export class ResolutionChecker {
       prompt,
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
-        allowedTools: []
+        allowedTools: [],
+        continue: true  // 最新の会話を継続（複数回のquery()呼び出しに対応）
       }
     });
 
