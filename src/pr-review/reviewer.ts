@@ -95,7 +95,7 @@ export class PRReviewer {
       prompt: this.createPromptStream(promptText),
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
-        maxTurns: 5,  // ツール呼び出しを考慮して複数ターン許可
+        maxTurns: 20,  // 複雑な調査が必要なレビューに対応
         mcpServers: {
           'review-output': reviewMcpServer  // MCP Serverとして登録
         },

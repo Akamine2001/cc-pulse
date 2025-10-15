@@ -78,7 +78,7 @@ export class ResolutionChecker {
       prompt: this.createPromptStream(promptText),
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
-        maxTurns: 5,  // ツール呼び出しを考慮
+        maxTurns: 20,  // 複雑な調査が必要なコメントに対応
         mcpServers: {
           'resolution-output': resolutionMcpServer
         },
