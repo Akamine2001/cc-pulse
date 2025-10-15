@@ -245,13 +245,14 @@ async function handleResolvedIssues(
 
   console.log(`📋 Found ${allPreviousComments.length} previous review comments`);
 
-  // 上限設定: 最大50件まで処理、5件ずつ並列実行（GitHub Actions timeout & API Rate Limit対策）
+  // 上限設定: 最大50件まで処理（直列実行）
   const MAX_COMMENTS = 50;
-  const BATCH_SIZE = 5;
   const commentsToCheck = allPreviousComments.slice(0, MAX_COMMENTS);
 
   if (allPreviousComments.length > MAX_COMMENTS) {
-    console.log(`⚠️ Processing first ${MAX_COMMENTS} comments in batches of ${BATCH_SIZE}`);
+    console.log(`⚠️ Processing first ${MAX_COMMENTS} comments (sequential execution)`);
+  } else {
+    console.log(`📋 Processing ${commentsToCheck.length} comments (sequential execution)`);
   }
 
   // 3. GraphQL threadIdマッピング
@@ -263,14 +264,18 @@ async function handleResolvedIssues(
   const parser = new DiffParser();
   const commentStates: CommentState[] = [];
 
-  // コメント処理関数
-  const processComment = async (comment: typeof commentsToCheck[0]): Promise<CommentState | null> => {
+  // 直列実行（Claude Agent SDKの並列実行制約のため）
+  let processedCount = 0;
+  for (const comment of commentsToCheck) {
+    processedCount++;
+    console.log(`🔄 Processing comment ${processedCount}/${commentsToCheck.length}...`);
+
     try {
       // 前回の問題を抽出
       const previousIssueData = parser.extractIssueFromComment(comment.body);
       if (!previousIssueData) {
         console.log(`⚠️ Could not parse issue from comment ${comment.id}`);
-        return null;
+        continue;
       }
 
       // 今回のレビューで同じ問題が検出されたか（内容ベース比較）
@@ -281,12 +286,14 @@ async function handleResolvedIssues(
 
       if (stillExists) {
         // まだ問題が残っている → スキップ（新しいレビューで指摘される）
-        return {
+        commentStates.push({
           comment,
           status: 'not_fixed',
           threadId: threadMap.get(comment.id),
           message: ''
-        };
+        });
+        console.log(`  ${comment.path}:${comment.line} - not_fixed (still detected in new review)`);
+        continue;
       }
 
       // 問題が消えた → Claudeで確認
@@ -316,34 +323,16 @@ async function handleResolvedIssues(
 
       console.log(`  ${comment.path}:${comment.line} - ${resolution.status}`);
 
-      return {
+      commentStates.push({
         comment,
         status: resolution.status,
         threadId: threadMap.get(comment.id),
         message: resolution.reasoning
-      };
+      });
     } catch (error) {
       console.error(`❌ Failed to check comment ${comment.id}:`, error);
-      return null;
+      // エラーがあっても続行
     }
-  };
-
-  // バッチ処理: 5件ずつ並列実行
-  for (let i = 0; i < commentsToCheck.length; i += BATCH_SIZE) {
-    const batch = commentsToCheck.slice(i, i + BATCH_SIZE);
-    const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(commentsToCheck.length / BATCH_SIZE);
-
-    console.log(`🔄 Processing batch ${batchNumber}/${totalBatches} (${batch.length} comments)...`);
-
-    const batchPromises = batch.map(comment => processComment(comment));
-    const results = await Promise.allSettled(batchPromises);
-
-    const batchStates = results
-      .filter(r => r.status === 'fulfilled' && r.value !== null)
-      .map(r => (r as any).value);
-
-    commentStates.push(...batchStates);
   }
 
   // 5. Resolve処理と返信
