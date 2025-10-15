@@ -5,6 +5,9 @@ import { readFileSync } from 'fs';
  */
 export class DiffParser {
   private readonly MAX_SNIPPET_LINES = 30; // コメントに含める最大行数
+  private readonly SNIPPET_HEAD_LINES = 10; // スニペット省略時の先頭行数
+  private readonly SNIPPET_TAIL_LINES = 10; // スニペット省略時の末尾行数
+  private readonly CONTEXT_LINES = 5; // コンテキスト行数
 
   /**
    * コメント用のコードスニペットを整形（長い場合は省略）
@@ -20,9 +23,9 @@ export class DiffParser {
       // 全行表示
       return this.getCodeLines(filePath, lineStart, lineEnd);
     } else {
-      // 先頭10行 + ... + 末尾10行
-      const headLines = 10;
-      const tailLines = 10;
+      // 先頭部分 + ... + 末尾部分
+      const headLines = this.SNIPPET_HEAD_LINES;
+      const tailLines = this.SNIPPET_TAIL_LINES;
       const head = this.getCodeLines(filePath, lineStart, lineStart + headLines - 1);
       const tail = this.getCodeLines(filePath, lineEnd - tailLines + 1, lineEnd);
       const omitted = totalLines - headLines - tailLines;
@@ -70,7 +73,7 @@ export class DiffParser {
     filePath: string,
     lineStart: number,
     lineEnd: number,
-    contextLines: number = 5
+    contextLines: number = this.CONTEXT_LINES
   ): Promise<string> {
     try {
       const fileContent = readFileSync(filePath, 'utf-8');

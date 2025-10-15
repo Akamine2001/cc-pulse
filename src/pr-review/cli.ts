@@ -168,7 +168,7 @@ async function postInlineComments(reviewResult: ReviewResult, headSha: string): 
 
       console.log(`  ✅ ${issue.file_path}:${issue.line_range!.end}`);
       successCount++;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`  ❌ Failed to post comment on ${issue.file_path}:${issue.line_range?.end}`);
       if (error instanceof Error) {
         console.error(`     Error: ${error.message}`);
@@ -219,7 +219,7 @@ _このレビューはClaude Agent SDK${existsSync('.serena/memories/project_ove
 
 interface CommentState {
   comment: any;
-  status: 'fixed' | 'todo_added' | 'needs_decision' | 'not_fixed';
+  status: 'fixed' | 'todo_added' | 'needs_decision' | 'implementation_changed' | 'not_fixed';
   threadId: string | undefined;
   message: string;
 }

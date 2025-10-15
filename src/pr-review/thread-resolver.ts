@@ -72,6 +72,12 @@ export class ThreadResolver {
         }
       `, { owner, repo, prNumber, cursor });
 
+      // nullチェック: GraphQL APIがnullを返す可能性に対応
+      if (!response.repository?.pullRequest?.reviewThreads) {
+        console.error('⚠️ Failed to fetch review threads: repository or pullRequest is null');
+        break;
+      }
+
       const { nodes, pageInfo } = response.repository.pullRequest.reviewThreads;
 
       // comment.databaseId → thread.id のマッピングを構築
