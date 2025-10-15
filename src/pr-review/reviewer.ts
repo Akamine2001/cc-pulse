@@ -1,12 +1,50 @@
-import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, tool, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { getClaudeCodeExecutablePath } from '../utils/paths';
-import { ReviewResultSchema, type ReviewResult } from './schemas';
+import {
+  ReviewResultSchema,
+  ReviewIssueSchema,
+  ReviewStatsSchema,
+  type ReviewResult
+} from './schemas';
 
 /**
  * PRレビュアークラス
  * Claude Agent SDKを使用してコードレビューを実施
  */
 export class PRReviewer {
+  private reviewResult: ReviewResult | null = null;
+
+  /**
+   * レビュー結果を提出するツール
+   */
+  private createReviewTool() {
+    return tool(
+      'submit_review',
+      'Submit the code review results in structured format',
+      ReviewResultSchema.shape,  // Zodスキーマから直接shape を使用
+      async (args) => {
+        // ツールが呼ばれた時点で、スキーマに沿ったデータが保証されている
+        // statsの整合性チェック（念のため）
+        const actualStats = {
+          total_issues: args.issues.length,
+          critical: args.issues.filter(i => i.severity === 'critical').length,
+          high: args.issues.filter(i => i.severity === 'high').length,
+          medium: args.issues.filter(i => i.severity === 'medium').length,
+          low: args.issues.filter(i => i.severity === 'low').length
+        };
+
+        this.reviewResult = {
+          issues: args.issues,
+          summary: args.summary,
+          stats: actualStats  // 実際の値で上書き
+        };
+
+        return {
+          content: [{ type: 'text' as const, text: 'Review submitted successfully' }]
+        };
+      }
+    );
+  }
 
   /**
    * 単一プロンプトをAsyncIterableに変換するヘルパー
@@ -35,7 +73,11 @@ export class PRReviewer {
       );
     }
 
+    // レビュー結果をリセット
+    this.reviewResult = null;
+
     const promptText = this.buildPrompt(diff, projectContext);
+    const reviewTool = this.createReviewTool();
 
     console.log('🤖 Starting Claude code review with Agent SDK...');
 
@@ -43,25 +85,27 @@ export class PRReviewer {
       prompt: this.createPromptStream(promptText),
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
-        maxTurns: 1,  // 単発入力を明示
-        allowedTools: []  // ツール不要、JSON生成のみ
+        maxTurns: 5,  // ツール呼び出しを考慮して複数ターン許可
+        allowedTools: [reviewTool]  // レビューツールのみ許可
       }
     });
 
-    // ストリームからレスポンスを収集
-    let responseText = '';
+    // ストリームを処理（ツールが呼ばれるのを待つ）
     for await (const message of stream) {
-      if (message?.type === 'assistant' && message.message?.content) {
-        for (const block of message.message.content) {
-          if (block.type === 'text') {
-            responseText += (block as any).text;
-          }
+      // メッセージ処理（ツールが呼ばれると this.reviewResult に保存される）
+      if (message?.type === 'assistant') {
+        // ツール呼び出しの確認
+        if (this.reviewResult) {
+          break; // 結果が取得できたら終了
         }
       }
     }
 
-    // JSONを抽出してパース
-    return this.parseReviewResponse(responseText);
+    if (!this.reviewResult) {
+      throw new Error('Failed to get review result from Claude (tool was not called)');
+    }
+
+    return this.reviewResult;
   }
 
   /**
@@ -86,84 +130,13 @@ ${diff}
 4. **コーディング規約**: CLAUDE.mdの規約遵守
 5. **型安全性**: TypeScriptの型定義の適切性
 
-# 出力形式
-以下のJSON形式**のみ**で出力してください（Markdownのコードブロックは不要）：
+# 結果の提出方法
+レビューが完了したら、**必ず submit_review ツールを使用して結果を提出してください**。
 
-{
-  "issues": [
-    {
-      "severity": "critical" | "high" | "medium" | "low",
-      "category": "デグレーション" | "パフォーマンス" | "セキュリティ" | "コーディング規約" | "型安全性",
-      "description": "問題の具体的な説明",
-      "file_path": "該当ファイルのパス（オプション）",
-      "line_range": { "start": 行番号, "end": 行番号 } (オプション),
-      "impact": "影響範囲の説明",
-      "suggestion": "推奨される対応方法"
-    }
-  ],
-  "summary": "レビュー全体の総評（3-5文で）",
-  "stats": {
-    "total_issues": 0,
-    "critical": 0,
-    "high": 0,
-    "medium": 0,
-    "low": 0
-  }
-}
+- issues: 検出された問題のリスト（問題がない場合は空配列）
+- summary: レビュー全体の総評（3-5文で）
+- stats: 問題の統計情報（total_issues, critical, high, medium, low）
 
-**重要**:
-- 必ず有効なJSON形式で出力してください
-- 問題がない場合は issues を空配列 [] にしてください
-- stats の各カウントは issues の内容と一致させてください`;
-  }
-
-  /**
-   * ClaudeのレスポンスからJSON を抽出してパース
-   */
-  private parseReviewResponse(responseText: string): ReviewResult {
-    // JSONブロックを抽出（```json ... ``` 形式の場合）
-    let jsonText = responseText.trim();
-
-    const jsonBlockMatch = responseText.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
-    if (jsonBlockMatch) {
-      jsonText = jsonBlockMatch[1].trim();
-    }
-
-    // JSONとして最初に現れる { ... } を抽出
-    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Failed to extract JSON from Claude response');
-    }
-
-    try {
-      const parsedData = JSON.parse(jsonMatch[0]);
-
-      // Zodでバリデーション
-      const validatedResult = ReviewResultSchema.parse(parsedData);
-
-      // statsの整合性チェック（念のため）
-      const actualStats = {
-        total_issues: validatedResult.issues.length,
-        critical: validatedResult.issues.filter(i => i.severity === 'critical').length,
-        high: validatedResult.issues.filter(i => i.severity === 'high').length,
-        medium: validatedResult.issues.filter(i => i.severity === 'medium').length,
-        low: validatedResult.issues.filter(i => i.severity === 'low').length
-      };
-
-      // statsを実際の値で上書き
-      validatedResult.stats = actualStats;
-
-      return validatedResult;
-    } catch (error) {
-      console.error('❌ Failed to parse review response');
-      if (error instanceof Error) {
-        console.error(`   Error: ${error.message}`);
-        console.error(`   Stack: ${error.stack}`);
-      } else {
-        console.error(`   Error:`, error);
-      }
-      console.error('   Response text:', responseText.substring(0, 500));
-      throw new Error(`Failed to parse review response: ${error instanceof Error ? error.message : error}`);
-    }
+**重要**: stats の各カウントは issues の内容と正確に一致させてください。`;
   }
 }

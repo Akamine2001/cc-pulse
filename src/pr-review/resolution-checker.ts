@@ -1,4 +1,4 @@
-import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, tool, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { getClaudeCodeExecutablePath } from '../utils/paths';
 import { IssueResolutionSchema, type IssueResolution, type ReviewIssue } from './schemas';
 
@@ -6,6 +6,25 @@ import { IssueResolutionSchema, type IssueResolution, type ReviewIssue } from '.
  * 前回指摘した問題の修正状況をClaude Agent SDKで判定
  */
 export class ResolutionChecker {
+  private resolutionResult: IssueResolution | null = null;
+
+  /**
+   * 修正判定結果を提出するツール
+   */
+  private createResolutionTool() {
+    return tool(
+      'submit_resolution',
+      'Submit the resolution check result',
+      IssueResolutionSchema.shape,
+      async (args) => {
+        this.resolutionResult = args as IssueResolution;
+        return {
+          content: [{ type: 'text' as const, text: 'Resolution result submitted successfully' }]
+        };
+      }
+    );
+  }
+
   /**
    * 単一プロンプトをAsyncIterableに変換するヘルパー
    */
@@ -35,7 +54,11 @@ export class ResolutionChecker {
       throw new Error('Claude Code CLI not found');
     }
 
+    // 結果をリセット
+    this.resolutionResult = null;
+
     const promptText = this.buildPrompt(previousIssue, originalCode, currentCode, projectContext);
+    const resolutionTool = this.createResolutionTool();
 
     console.log(`🔍 Checking resolution for: ${previousIssue.description.substring(0, 50)}...`);
 
@@ -43,24 +66,25 @@ export class ResolutionChecker {
       prompt: this.createPromptStream(promptText),
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
-        maxTurns: 1,  // 単発入力を明示
-        allowedTools: []
+        maxTurns: 5,  // ツール呼び出しを考慮
+        allowedTools: [resolutionTool]
       }
     });
 
-    // ストリームからレスポンスを収集
-    let responseText = '';
+    // ストリームを処理（ツールが呼ばれるのを待つ）
     for await (const message of stream) {
-      if (message?.type === 'assistant' && message.message?.content) {
-        for (const block of message.message.content) {
-          if (block.type === 'text') {
-            responseText += (block as any).text;
-          }
+      if (message?.type === 'assistant') {
+        if (this.resolutionResult) {
+          break; // 結果が取得できたら終了
         }
       }
     }
 
-    return this.parseResolution(responseText);
+    if (!this.resolutionResult) {
+      throw new Error('Failed to get resolution result from Claude (tool was not called)');
+    }
+
+    return this.resolutionResult;
   }
 
   /**
@@ -116,54 +140,12 @@ ${originalCode ? '上記の「前回指摘した時のコード」と「現在�
 
 4. **not_fixed**: 上記に該当せず、問題が未解決
 
-# 出力形式（JSON）
-以下のJSON形式**のみ**で出力してください：
+# 結果の提出方法
+判定が完了したら、**必ず submit_resolution ツールを使用して結果を提出してください**。
 
-{
-  "status": "fixed" | "todo_added" | "needs_decision" | "not_fixed",
-  "reasoning": "判定理由を1-2文で簡潔に",
-  "code_snippet": "該当部分のコード（証拠）",
-  "owner_mention_needed": true/false
-}
-
-**重要**: 必ず有効なJSON形式で出力してください`;
-  }
-
-  /**
-   * Claudeのレスポンスから判定結果を抽出してパース
-   */
-  private parseResolution(responseText: string): IssueResolution {
-    // JSONブロックを抽出（```json ... ``` 形式の場合）
-    let jsonText = responseText.trim();
-
-    const jsonBlockMatch = responseText.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
-    if (jsonBlockMatch) {
-      jsonText = jsonBlockMatch[1].trim();
-    }
-
-    // JSONとして最初に現れる { ... } を抽出
-    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Failed to extract JSON from resolution check response');
-    }
-
-    try {
-      const parsedData = JSON.parse(jsonMatch[0]);
-
-      // Zodでバリデーション
-      const validatedResult = IssueResolutionSchema.parse(parsedData);
-
-      return validatedResult;
-    } catch (error) {
-      console.error('❌ Failed to parse resolution response');
-      if (error instanceof Error) {
-        console.error(`   Error: ${error.message}`);
-        console.error(`   Stack: ${error.stack}`);
-      } else {
-        console.error(`   Error:`, error);
-      }
-      console.error('   Response text:', responseText.substring(0, 500));
-      throw new Error(`Failed to parse resolution response: ${error instanceof Error ? error.message : error}`);
-    }
+- status: 判定結果（fixed, todo_added, needs_decision, not_fixed）
+- reasoning: 判定理由を1-2文で簡潔に
+- code_snippet: 該当部分のコード（証拠）
+- owner_mention_needed: needs_decision の場合は true、それ以外は false`;
   }
 }
