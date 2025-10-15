@@ -71,6 +71,9 @@ export class ResolutionChecker {
 
     console.log(`🔍 Checking resolution for: ${previousIssue.description.substring(0, 50)}...`);
 
+    // stderrを収集
+    let stderrOutput = '';
+
     const stream = query({
       prompt: this.createPromptStream(promptText),
       options: {
@@ -79,40 +82,60 @@ export class ResolutionChecker {
         mcpServers: {
           'resolution-output': resolutionMcpServer
         },
-        allowedTools: ['mcp__resolution-output__submit_resolution']
+        allowedTools: ['mcp__resolution-output__submit_resolution'],
+        stderr: (data: string) => {
+          stderrOutput += data;
+          console.error(`[STDERR] ${data}`);
+        }
       }
     });
 
     // ストリームを処理（ツールが呼ばれるのを待つ）
-    for await (const message of stream) {
-      if (message?.type === 'assistant' && message.message?.content) {
-        for (const block of message.message.content) {
-          if (block.type === 'tool_use') {
-            const toolUse = block as any;
-            console.log(`[DEBUG] Resolution tool called: ${toolUse.name}`);
+    try {
+      for await (const message of stream) {
+        if (message?.type === 'assistant' && message.message?.content) {
+          for (const block of message.message.content) {
+            if (block.type === 'tool_use') {
+              const toolUse = block as any;
+              console.log(`[DEBUG] Resolution tool called: ${toolUse.name}`);
 
-            // submit_resolutionツールが呼ばれたら、inputから結果を取得
-            if (toolUse.name === 'mcp__resolution-output__submit_resolution') {
-              this.resolutionResult = toolUse.input as IssueResolution;
-              console.log(`[DEBUG] Resolution result captured: ${this.resolutionResult.status}`);
+              // submit_resolutionツールが呼ばれたら、inputから結果を取得
+              if (toolUse.name === 'mcp__resolution-output__submit_resolution') {
+                this.resolutionResult = toolUse.input as IssueResolution;
+                console.log(`[DEBUG] Resolution result captured: ${this.resolutionResult.status}`);
+              }
             }
-          }
 
-          if (block.type === 'text') {
-            const text = (block as any).text;
-            if (text && text.trim()) {
-              console.log(`[DEBUG] Resolution text: ${text.substring(0, 200)}`);
+            if (block.type === 'text') {
+              const text = (block as any).text;
+              if (text && text.trim()) {
+                console.log(`[DEBUG] Resolution text: ${text.substring(0, 200)}`);
+              }
             }
           }
         }
-      }
 
-      if (this.resolutionResult) {
-        break; // 結果が取得できたら終了
+        if (this.resolutionResult) {
+          break; // 結果が取得できたら終了
+        }
       }
+    } catch (error) {
+      // ストリーム処理中のエラーをキャッチ
+      console.error('❌ Error during resolution check stream processing');
+      if (error instanceof Error) {
+        console.error(`   Error: ${error.message}`);
+        console.error(`   Stack: ${error.stack}`);
+      }
+      if (stderrOutput) {
+        console.error(`   Claude Code STDERR:\n${stderrOutput}`);
+      }
+      throw error;
     }
 
     if (!this.resolutionResult) {
+      if (stderrOutput) {
+        console.error(`[ERROR] Claude Code STDERR output:\n${stderrOutput}`);
+      }
       throw new Error('Failed to get resolution result from Claude (tool was not called)');
     }
 

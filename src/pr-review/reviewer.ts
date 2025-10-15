@@ -88,6 +88,9 @@ export class PRReviewer {
 
     console.log('🤖 Starting Claude code review with Agent SDK...');
 
+    // stderrを収集
+    let stderrOutput = '';
+
     const stream = query({
       prompt: this.createPromptStream(promptText),
       options: {
@@ -96,55 +99,75 @@ export class PRReviewer {
         mcpServers: {
           'review-output': reviewMcpServer  // MCP Serverとして登録
         },
-        allowedTools: ['mcp__review-output__submit_review']  // MCPツール名で指定
+        allowedTools: ['mcp__review-output__submit_review'],  // MCPツール名で指定
+        stderr: (data: string) => {
+          stderrOutput += data;
+          console.error(`[STDERR] ${data}`);
+        }
       }
     });
 
     // ストリームを処理（ツールが呼ばれるのを待つ）
-    for await (const message of stream) {
-      if (message?.type === 'assistant' && message.message?.content) {
-        for (const block of message.message.content) {
-          if (block.type === 'tool_use') {
-            const toolUse = block as any;
-            console.log(`[DEBUG] Tool called: ${toolUse.name}`);
+    try {
+      for await (const message of stream) {
+        if (message?.type === 'assistant' && message.message?.content) {
+          for (const block of message.message.content) {
+            if (block.type === 'tool_use') {
+              const toolUse = block as any;
+              console.log(`[DEBUG] Tool called: ${toolUse.name}`);
 
-            // submit_reviewツールが呼ばれたら、inputから結果を取得
-            if (toolUse.name === 'mcp__review-output__submit_review') {
-              // ツールのinputがスキーマ検証済みのデータ
-              const actualStats = {
-                total_issues: toolUse.input.issues.length,
-                critical: toolUse.input.issues.filter((i: any) => i.severity === 'critical').length,
-                high: toolUse.input.issues.filter((i: any) => i.severity === 'high').length,
-                medium: toolUse.input.issues.filter((i: any) => i.severity === 'medium').length,
-                low: toolUse.input.issues.filter((i: any) => i.severity === 'low').length
-              };
+              // submit_reviewツールが呼ばれたら、inputから結果を取得
+              if (toolUse.name === 'mcp__review-output__submit_review') {
+                // ツールのinputがスキーマ検証済みのデータ
+                const actualStats = {
+                  total_issues: toolUse.input.issues.length,
+                  critical: toolUse.input.issues.filter((i: any) => i.severity === 'critical').length,
+                  high: toolUse.input.issues.filter((i: any) => i.severity === 'high').length,
+                  medium: toolUse.input.issues.filter((i: any) => i.severity === 'medium').length,
+                  low: toolUse.input.issues.filter((i: any) => i.severity === 'low').length
+                };
 
-              this.reviewResult = {
-                issues: toolUse.input.issues,
-                summary: toolUse.input.summary,
-                stats: actualStats
-              };
+                this.reviewResult = {
+                  issues: toolUse.input.issues,
+                  summary: toolUse.input.summary,
+                  stats: actualStats
+                };
 
-              console.log(`[DEBUG] Review result captured: ${this.reviewResult.issues.length} issues`);
+                console.log(`[DEBUG] Review result captured: ${this.reviewResult.issues.length} issues`);
+              }
             }
-          }
 
-          if (block.type === 'text') {
-            const text = (block as any).text;
-            if (text && text.trim()) {
-              console.log(`[DEBUG] Text: ${text.substring(0, 200)}`);
+            if (block.type === 'text') {
+              const text = (block as any).text;
+              if (text && text.trim()) {
+                console.log(`[DEBUG] Text: ${text.substring(0, 200)}`);
+              }
             }
           }
         }
-      }
 
-      // 結果取得完了したらループを抜ける
-      if (this.reviewResult) {
-        break;
+        // 結果取得完了したらループを抜ける
+        if (this.reviewResult) {
+          break;
+        }
       }
+    } catch (error) {
+      // ストリーム処理中のエラーをキャッチ
+      console.error('❌ Error during review stream processing');
+      if (error instanceof Error) {
+        console.error(`   Error: ${error.message}`);
+        console.error(`   Stack: ${error.stack}`);
+      }
+      if (stderrOutput) {
+        console.error(`   Claude Code STDERR:\n${stderrOutput}`);
+      }
+      throw error;
     }
 
     if (!this.reviewResult) {
+      if (stderrOutput) {
+        console.error(`[ERROR] Claude Code STDERR output:\n${stderrOutput}`);
+      }
       throw new Error('Failed to get review result from Claude (tool was not called)');
     }
 
