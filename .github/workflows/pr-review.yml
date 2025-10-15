@@ -36,7 +36,13 @@ jobs:
       - name: Install Dependencies
         run: |
           bun install
-          bun add @anthropic-ai/sdk octokit
+
+      # Claude Code CLI インストール
+      - name: Install Claude Code CLI
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          echo "Installed Claude Code version:"
+          claude --version
 
       # Python環境セットアップ (Serena MCP用)
       - name: Setup Python
