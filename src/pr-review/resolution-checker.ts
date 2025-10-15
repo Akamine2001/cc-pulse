@@ -1,4 +1,4 @@
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { getClaudeCodeExecutablePath } from '../utils/paths';
 import { IssueResolutionSchema, type IssueResolution, type ReviewIssue } from './schemas';
 
@@ -6,6 +6,21 @@ import { IssueResolutionSchema, type IssueResolution, type ReviewIssue } from '.
  * 前回指摘した問題の修正状況をClaude Agent SDKで判定
  */
 export class ResolutionChecker {
+  /**
+   * 単一プロンプトをAsyncIterableに変換するヘルパー
+   */
+  private async* createPromptStream(promptText: string): AsyncIterable<SDKUserMessage> {
+    yield {
+      type: 'user' as const,
+      session_id: '',
+      message: {
+        role: 'user' as const,
+        content: promptText
+      },
+      parent_tool_use_id: null
+    };
+  }
+
   /**
    * 前回の問題が解決されたか判定
    */
@@ -20,12 +35,12 @@ export class ResolutionChecker {
       throw new Error('Claude Code CLI not found');
     }
 
-    const prompt = this.buildPrompt(previousIssue, originalCode, currentCode, projectContext);
+    const promptText = this.buildPrompt(previousIssue, originalCode, currentCode, projectContext);
 
     console.log(`🔍 Checking resolution for: ${previousIssue.description.substring(0, 50)}...`);
 
     const stream = query({
-      prompt,
+      prompt: this.createPromptStream(promptText),
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
         maxTurns: 1,  // 単発入力を明示

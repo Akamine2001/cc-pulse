@@ -1,4 +1,4 @@
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { getClaudeCodeExecutablePath } from '../utils/paths';
 import { ReviewResultSchema, type ReviewResult } from './schemas';
 
@@ -7,6 +7,21 @@ import { ReviewResultSchema, type ReviewResult } from './schemas';
  * Claude Agent SDKを使用してコードレビューを実施
  */
 export class PRReviewer {
+
+  /**
+   * 単一プロンプトをAsyncIterableに変換するヘルパー
+   */
+  private async* createPromptStream(promptText: string): AsyncIterable<SDKUserMessage> {
+    yield {
+      type: 'user' as const,
+      session_id: '',
+      message: {
+        role: 'user' as const,
+        content: promptText
+      },
+      parent_tool_use_id: null
+    };
+  }
 
   /**
    * PRの差分をレビューして構造化されたレビュー結果を返す
@@ -20,12 +35,12 @@ export class PRReviewer {
       );
     }
 
-    const prompt = this.buildPrompt(diff, projectContext);
+    const promptText = this.buildPrompt(diff, projectContext);
 
     console.log('🤖 Starting Claude code review with Agent SDK...');
 
     const stream = query({
-      prompt,
+      prompt: this.createPromptStream(promptText),
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
         maxTurns: 1,  // 単発入力を明示
