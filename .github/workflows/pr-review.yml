@@ -120,7 +120,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          bun run scripts/review-pr.ts
+          bun run src/pr-review/cli.ts
 
       # エラー時のフォールバック
       - name: Fallback Comment on Error
