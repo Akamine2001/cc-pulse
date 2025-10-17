@@ -21,6 +21,7 @@
     "build:x64": "bun run build:css && bun build --compile --minify --target=bun-darwin-x64 src/cli.ts --outfile dist/cc-pulse-darwin-x64",
     "build:css": "tailwindcss -i src/templates/styles.css -o src/templates/styles.built.css --minify",
     "dev:css": "tailwindcss -i src/templates/styles.css -o src/templates/styles.built.css --watch",
+    "review:pr": "bun run tools/pr-review/index.ts",
     "test": "bun test",
     "lint": "tsc --noEmit"
   },
