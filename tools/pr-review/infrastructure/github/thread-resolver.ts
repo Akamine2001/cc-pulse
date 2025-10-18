@@ -135,4 +135,66 @@ export class ThreadResolver {
 
     console.log(`✅ Resolved ${threadIds.length} threads`);
   }
+
+  /**
+   * resolve済みのreview thread IDセットを取得
+   * ページネーション対応で全てのresolve済みthreadsを取得
+   */
+  async getResolvedThreadIds(
+    owner: string,
+    repo: string,
+    prNumber: number
+  ): Promise<Set<string>> {
+    const resolvedIds = new Set<string>();
+    let hasNextPage = true;
+    let cursor: string | null = null;
+
+    console.log('🔍 Fetching resolved threads from GraphQL API...');
+
+    while (hasNextPage) {
+      const response: ReviewThreadsResponse = await this.octokit.graphql<ReviewThreadsResponse>(`
+        query($owner: String!, $repo: String!, $prNumber: Int!, $cursor: String) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $prNumber) {
+              reviewThreads(first: 100, after: $cursor) {
+                nodes {
+                  id
+                  isResolved
+                }
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+              }
+            }
+          }
+        }
+      `, { owner, repo, prNumber, cursor });
+
+      // nullチェック: GraphQL APIがnullを返す可能性に対応
+      if (!response.repository?.pullRequest?.reviewThreads) {
+        console.error('⚠️ Failed to fetch review threads: repository or pullRequest is null');
+        break;
+      }
+
+      const reviewThreads = response.repository.pullRequest.reviewThreads;
+      const nodes = reviewThreads.nodes;
+      const pageInfo = reviewThreads.pageInfo;
+
+      // resolve済みのthreadIdを収集
+      for (const thread of nodes) {
+        if (thread.isResolved) {
+          resolvedIds.add(thread.id);
+        }
+      }
+
+      hasNextPage = pageInfo.hasNextPage;
+      cursor = pageInfo.endCursor;
+
+      console.log(`  Fetched ${nodes.length} threads, ${resolvedIds.size} resolved so far`);
+    }
+
+    console.log(`✅ Found ${resolvedIds.size} resolved threads`);
+    return resolvedIds;
+  }
 }

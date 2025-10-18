@@ -98,6 +98,10 @@ bun run build
 
 cc-pulseは、GitHub ActionsとClaude APIを使用した自動コードレビューシステムを搭載しています。PRが作成されると、自動的にコードをレビューしてコメントを投稿します。
 
+**実装場所**: `tools/pr-review/` （開発支援ツールとして`src/`と分離）
+
+詳細は [`tools/pr-review/README.md`](tools/pr-review/README.md) を参照してください。
+
 ### 🔧 セットアップ
 
 #### 1. GitHub Secrets 設定

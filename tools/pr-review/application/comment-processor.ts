@@ -64,18 +64,28 @@ export async function processPreviousConversations(
     console.log(`⚠️ Processing first ${MAX_COMMENTS} comments`);
   }
 
-  // 3. GraphQL threadIdマッピング
+  // 3. GraphQL threadIdマッピング + resolve済みスレッド取得
   const resolver = new ThreadResolver(octokit);
   const threadMap = await resolver.buildThreadMap(owner, repo, prNumber);
+  const resolvedThreadIds = await resolver.getResolvedThreadIds(owner, repo, prNumber);
 
   // 4. 各Conversationを処理
   const analyzer = new ConversationDiffAnalyzer();
   const parser = new DiffParser();
   let processedCount = 0;
+  let skippedCount = 0;
 
   for (const comment of commentsToCheck) {
     processedCount++;
     console.log(`🔄 Processing conversation ${processedCount}/${commentsToCheck.length}...`);
+
+    // resolve済みならスキップ
+    const threadId = threadMap.get(comment.id);
+    if (threadId && resolvedThreadIds.has(threadId)) {
+      console.log(`  ✅ Skipped (already resolved): ${comment.path}:${comment.line}`);
+      skippedCount++;
+      continue;
+    }
 
     try {
       // コメントから前回の問題を抽出
@@ -216,5 +226,5 @@ ${checkResult.reasoning}
     }
   }
 
-  console.log(`✅ Processed ${processedCount} conversations`);
+  console.log(`✅ Processed ${processedCount} conversations (${skippedCount} skipped as already resolved)`);
 }

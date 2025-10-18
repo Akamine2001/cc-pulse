@@ -146,7 +146,10 @@ export class GitHubClient {
       let count = 1; // 元のコメント自身
       for (const c of comments.data) {
         if (c.in_reply_to_id === commentId) {
-          count++;
+          // bot自身の返信は除外（ユーザーの実際の返信のみカウント）
+          if (!c.body.includes('🤖 Auto-Review')) {
+            count++;
+          }
         }
       }
 
