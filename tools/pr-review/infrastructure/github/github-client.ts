@@ -5,6 +5,7 @@
  */
 
 import type { Octokit } from 'octokit';
+import { BOT_SIGNATURE } from '../../shared/constants';
 
 export class GitHubClient {
   constructor(
@@ -147,7 +148,7 @@ export class GitHubClient {
       for (const c of comments.data) {
         if (c.in_reply_to_id === commentId) {
           // bot自身の返信は除外（ユーザーの実際の返信のみカウント）
-          if (!c.body.includes('🤖 Auto-Review')) {
+          if (!c.body.includes(BOT_SIGNATURE)) {
             count++;
           }
         }

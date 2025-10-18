@@ -11,6 +11,7 @@ import { ConversationDiffAnalyzer } from '../domain/conversation-diff-analyzer';
 import { ThreadResolver } from '../infrastructure/github/thread-resolver';
 import { GitHubClient } from '../infrastructure/github/github-client';
 import { DiffParser } from '../shared/diff-parser';
+import { BOT_SIGNATURE } from '../shared/constants';
 
 /**
  * 前回のConversationを処理
@@ -125,7 +126,9 @@ export async function processPreviousConversations(
           comment_id: comment.id,
           body: `⚠️ このファイルはコメント投稿後に変更されていません。
 
-引き続き対応をお願いします 🙏`
+引き続き対応をお願いします 🙏
+
+_- ${BOT_SIGNATURE}_`
         });
         continue;
       }
@@ -144,7 +147,9 @@ export async function processPreviousConversations(
           comment_id: comment.id,
           body: `@${prAuthor} こちらのConversationについて、判断をお願いします。
 
-ファイルに変更がありましたが、議論が継続中のため、自動クローズしていません。`
+ファイルに変更がありましたが、議論が継続中のため、自動クローズしていません。
+
+_- ${BOT_SIGNATURE}_`
         });
         continue;
       }
@@ -171,7 +176,9 @@ export async function processPreviousConversations(
 
 ${checkResult.reasoning}
 
-前回の指摘は無効になりました。新しい実装に問題があれば、次のレビューでお知らせします。`
+前回の指摘は無効になりました。新しい実装に問題があれば、次のレビューでお知らせします。
+
+_- ${BOT_SIGNATURE}_`
           });
           console.log(`  ✅ Closed (major change): ${comment.path}:${comment.line}`);
           break;
@@ -190,7 +197,9 @@ ${checkResult.reasoning}
 
 ${checkResult.reasoning}
 
-対応計画が明確なため、クローズします。`
+対応計画が明確なため、クローズします。
+
+_- ${BOT_SIGNATURE}_`
           });
           console.log(`  ✅ Closed (TODO added): ${comment.path}:${comment.line}`);
           break;
@@ -206,7 +215,9 @@ ${checkResult.reasoning}
 
 ${checkResult.reasoning}
 
-引き続き対応をお願いします 🙏`
+引き続き対応をお願いします 🙏
+
+_- ${BOT_SIGNATURE}_`
           });
           console.log(`  ⚠️ Not resolved (re-commented): ${comment.path}:${comment.line}`);
           break;
