@@ -1,4 +1,5 @@
 import type { ReviewResult, ReviewIssue, ReviewSeverity } from './schemas';
+import { BOT_SIGNATURE } from './constants';
 
 /**
  * 重要度別の絵文字を取得
@@ -65,7 +66,7 @@ export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: str
 
   markdown += `\n**影響**: ${issue.impact}`;
   markdown += `\n**推奨対応**: ${issue.suggestion}`;
-  markdown += `\n\n🤖 Auto-Review`;
+  markdown += `\n\n_- ${BOT_SIGNATURE}_`;
 
   return markdown;
 }

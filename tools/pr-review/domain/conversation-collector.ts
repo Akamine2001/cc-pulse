@@ -6,6 +6,7 @@
 
 import type { Octokit } from 'octokit';
 import { DiffParser } from '../shared/diff-parser';
+import { BOT_SIGNATURE } from '../shared/constants';
 
 export interface ExistingConversation {
   filePath: string;
@@ -38,7 +39,7 @@ export async function collectExistingConversations(
 
   // 自動レビューのコメントのみ抽出
   const autoReviewComments = previousComments.data.filter(
-    c => c.body.includes('🤖 Auto-Review')
+    c => c.body.includes(BOT_SIGNATURE)
   );
 
   if (autoReviewComments.length === 0) {

@@ -47,7 +47,7 @@ export async function processPreviousConversations(
 
   // 2. 自動レビューのコメントのみ抽出
   const autoReviewComments = previousComments.data.filter(
-    c => c.body.includes('🤖 Auto-Review')
+    c => c.body.includes(BOT_SIGNATURE)
   );
 
   if (autoReviewComments.length === 0) {

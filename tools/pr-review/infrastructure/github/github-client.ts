@@ -45,7 +45,7 @@ export class GitHubClient {
 
     // 自動レビューのコメントのみ抽出
     return previousComments.data.filter(
-      c => c.body.includes('🤖 Auto-Review')
+      c => c.body.includes(BOT_SIGNATURE)
     );
   }
 
