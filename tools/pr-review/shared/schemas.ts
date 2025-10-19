@@ -11,16 +11,16 @@ export type ReviewSeverity = z.infer<typeof ReviewSeveritySchema>;
  */
 export const ReviewIssueSchema = z.object({
   severity: ReviewSeveritySchema,
-  category: z.string().describe('問題のカテゴリ（デグレーション、パフォーマンス、セキュリティ、規約、型安全性など）'),
-  description: z.string().describe('問題の説明'),
-  file_path: z.string().optional().describe('該当ファイルのパス'),
+  category: z.string(),
+  description: z.string(),
+  file_path: z.string().optional(),
   line_range: z.object({
     start: z.number(),
     end: z.number()
-  }).optional().describe('該当行の範囲'),
-  impact: z.string().describe('影響範囲'),
-  suggestion: z.string().describe('推奨対応')
-});
+  }).optional(),
+  impact: z.string(),
+  suggestion: z.string()
+});;
 
 export type ReviewIssue = z.infer<typeof ReviewIssueSchema>;
 
@@ -28,12 +28,12 @@ export type ReviewIssue = z.infer<typeof ReviewIssueSchema>;
  * レビュー統計情報
  */
 export const ReviewStatsSchema = z.object({
-  total_issues: z.number().describe('問題の総数'),
-  critical: z.number().describe('重大な問題の数'),
-  high: z.number().describe('重要な問題の数'),
-  medium: z.number().describe('中程度の問題の数'),
-  low: z.number().describe('軽微な問題の数')
-});
+  total_issues: z.number(),
+  critical: z.number(),
+  high: z.number(),
+  medium: z.number(),
+  low: z.number()
+});;
 
 export type ReviewStats = z.infer<typeof ReviewStatsSchema>;
 
@@ -66,9 +66,9 @@ export type ResolutionStatus = z.infer<typeof ResolutionStatusSchema>;
  */
 export const IssueResolutionSchema = z.object({
   status: ResolutionStatusSchema,
-  reasoning: z.string().describe('判定理由'),
-  code_snippet: z.string().optional().describe('該当コード（証拠）'),
-  owner_mention_needed: z.boolean().describe('オーナーメンションが必要か')
-});
+  reasoning: z.string(),
+  code_snippet: z.string().optional(),
+  owner_mention_needed: z.boolean()
+});;
 
 export type IssueResolution = z.infer<typeof IssueResolutionSchema>;
