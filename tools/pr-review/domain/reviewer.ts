@@ -177,6 +177,12 @@ ${JSON.stringify(validatedData, null, 2)}
 
       // ストリームを処理
       for await (const message of stream) {
+        // 全メッセージタイプをログ出力（デバッグ用）
+        console.log(`[DEBUG] ========== Stream Message ==========`);
+        console.log(`[DEBUG] Message type: ${message?.type}`);
+        console.log(`[DEBUG] Full message:`, JSON.stringify(message, null, 2));
+        console.log(`[DEBUG] ====================================`);
+
         if (message?.type === 'assistant' && message.message?.content) {
           for (const block of message.message.content) {
             // ツール呼び出しログ（全ツール対象）
