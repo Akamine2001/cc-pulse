@@ -158,7 +158,11 @@ ${JSON.stringify(validatedData, null, 2)}
         pathToClaudeCodeExecutable: claudeCodePath,
         maxTurns: 70,
         mcpServers: {
-          'review-output': reviewMcpServer,
+          'review-output': {
+            type: 'sdk' as const,
+            name: 'review-output',
+            instance: reviewMcpServer.instance
+          },
           'duplicate-checker': duplicateCheckerServer
         },
         allowedTools: [
