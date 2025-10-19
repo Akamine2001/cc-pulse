@@ -211,17 +211,17 @@ ${JSON.stringify(validatedData, null, 2)}
 
       return this.reviewResult;
 
-      } catch (error: any) {
+    } catch (error: any) {
       console.error('❌ Error during review stream processing');
       console.error('   Error:', error.message);
       console.error('   Stack:', error.stack);
       console.error('   Claude Code STDERR:');
       console.error(stderrOutput);
       throw error;
-      } finally {
+    } finally {
       // 一時ファイルをクリーンアップ
       deleteTempDiffFiles(fileDiffs);
-      }
+    }
   }
 
   /**
