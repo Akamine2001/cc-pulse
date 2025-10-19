@@ -46,7 +46,7 @@ export class PRReviewer {
       const formatReviewTool = tool(
       'format_review',
       'Format and validate review data before submission. Use this to prepare your review in the correct structure. If validation fails, this tool will return error messages to help you fix the format.',
-      z.object({}).passthrough(),  // 任意のプロパティを許可
+      {},  // 空のスキーマ（任意の引数を許可）
       async (args: any) => {
         console.log(`📝 [format_review] Validating review data...`);
 
