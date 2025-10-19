@@ -28,7 +28,7 @@ program
       const stream = await query({
         prompt: 'Please introduce yourself briefly in 3 lines.',
         options: {
-          maxTurns: 5
+          maxTurns: 20
         }
       });
 
