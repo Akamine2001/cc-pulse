@@ -97,9 +97,11 @@ mcp__duplicate-checker__check_duplicate_issue({
 ```
 
 **CRITICAL - Tool Input Format**:
-- issues, stats は配列・オブジェクトとして渡す(JSON文字列ではない)
+- **issues, stats は配列・オブジェクトとして渡す(JSON文字列ではない)**
 - stats の各カウントは issues の内容と正確に一致させる
-- format_review が成功するまで retry する
+- **format_reviewがエラーを返した場合、エラーメッセージを読んで修正し、必ず再度format_reviewを呼び出す**
+- エラーメッセージには具体的な修正方法が記載されているので、それに従って修正する
+- format_reviewが "✅ Validation passed!" を返すまで何度でもretryする
 
 ## 🔹 Phase 2: 最終提出(format_review成功後のみ)
 

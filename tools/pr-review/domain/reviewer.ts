@@ -34,62 +34,147 @@ export class PRReviewer {
     // 差分をファイル単位で分割して一時ファイルに保存
     const fileDiffs = saveDiffByFiles(diff);
 
+    // stderrを収集（catchブロックからもアクセスできるようにtryの外で宣言）
+    let stderrOutput = '';
+
     try {
       // プロンプトを生成（ファイル単位の差分リストを渡す）
       const promptText = this.buildPrompt(fileDiffs, projectContext, reviewGuidelines, existingConversations, commentsForDb);
 
       // MCP Server - 2段階検証方式
-      // STEP 1: フォーマット検証ツール
+      // STEP 1: フォーマット検証ツール（エラー非送出型）
       const formatReviewTool = tool(
       'format_review',
-      'Format and validate review data before submission. Use this to prepare your review in the correct structure.',
+      'Format and validate review data before submission. Use this to prepare your review in the correct structure. If validation fails, this tool will return error messages to help you fix the format.',
       {
-        issues: z.array(ReviewIssueSchema),
-        summary: z.string(),
-        stats: ReviewStatsSchema
+        issues: z.any(),  // 緩いスキーマで受け入れ、内部で検証
+        summary: z.any(),
+        stats: z.any()
       },
       async (args) => {
-        // バリデーション成功
-        console.log(`✅ [format_review] Validated ${args.issues.length} issues`);
-        
-        // statsの整合性チェック
-        const actualStats = {
-          total_issues: args.issues.length,
-          critical: args.issues.filter(i => i.severity === 'critical').length,
-          high: args.issues.filter(i => i.severity === 'high').length,
-          medium: args.issues.filter(i => i.severity === 'medium').length,
-          low: args.issues.filter(i => i.severity === 'low').length
-        };
-        
-        // statsが一致しているか確認
-        const statsMatch = 
-          actualStats.total_issues === args.stats.total_issues &&
-          actualStats.critical === args.stats.critical &&
-          actualStats.high === args.stats.high &&
-          actualStats.medium === args.stats.medium &&
-          actualStats.low === args.stats.low;
-        
-        if (!statsMatch) {
-          console.warn(`⚠️ [format_review] Stats mismatch detected, using actual counts`);
-        }
-        
-        const validatedData = {
-          issues: args.issues,
-          summary: args.summary,
-          stats: actualStats
-        };
-        
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `✅ Review data validated successfully!
+        console.log(`📝 [format_review] Validating review data...`);
+
+        try {
+          // 手動バリデーション
+          const errors: string[] = [];
+
+          // issuesのバリデーション
+          if (!Array.isArray(args.issues)) {
+            errors.push(`❌ "issues" must be an array, not a ${typeof args.issues}. Do NOT pass JSON string - pass the array object directly.`);
+          } else {
+            // 各issueの検証
+            const issueSchema = z.array(ReviewIssueSchema);
+            const issuesResult = issueSchema.safeParse(args.issues);
+            if (!issuesResult.success && 'error' in issuesResult) {
+              errors.push(`❌ "issues" array contains invalid items:\n${issuesResult.error.errors.map(e => `  - ${e.path.join('.')}: ${e.message}`).join('\n')}`);
+            }
+          }
+
+          // summaryのバリデーション
+          if (typeof args.summary !== 'string') {
+            errors.push(`❌ "summary" must be a string, not a ${typeof args.summary}.`);
+          }
+
+          // statsのバリデーション
+          if (typeof args.stats !== 'object' || args.stats === null) {
+            errors.push(`❌ "stats" must be an object, not a ${typeof args.stats}. Do NOT pass JSON string - pass the object directly.`);
+          } else {
+            const statsResult = ReviewStatsSchema.safeParse(args.stats);
+            if (!statsResult.success && 'error' in statsResult) {
+              errors.push(`❌ "stats" object is invalid:\n${statsResult.error.errors.map(e => `  - ${e.path.join('.')}: ${e.message}`).join('\n')}`);
+            }
+          }
+
+          // エラーがある場合はフィードバックを返す
+          if (errors.length > 0) {
+            console.warn(`⚠️ [format_review] Validation failed with ${errors.length} errors`);
+            return {
+              content: [{
+                type: 'text' as const,
+                text: `❌ Format validation failed. Please fix the following errors and retry:
+
+${errors.join('\n\n')}
+
+Expected format:
+{
+  "issues": [
+    {
+      "severity": "high" | "medium" | "low" | "critical",
+      "category": "string",
+      "description": "string",
+      "file_path": "string",
+      "line_range": { "start": number, "end": number },
+      "impact": "string",
+      "suggestion": "string"
+    }
+  ],
+  "summary": "string",
+  "stats": {
+    "total_issues": number,
+    "critical": number,
+    "high": number,
+    "medium": number,
+    "low": number
+  }
+}
+
+Please retry format_review with the corrected data.`
+              }]
+            };
+          }
+
+          // バリデーション成功 - statsの整合性チェック
+          console.log(`✅ [format_review] Validated ${args.issues.length} issues`);
+
+          const actualStats = {
+            total_issues: args.issues.length,
+            critical: args.issues.filter((i: any) => i.severity === 'critical').length,
+            high: args.issues.filter((i: any) => i.severity === 'high').length,
+            medium: args.issues.filter((i: any) => i.severity === 'medium').length,
+            low: args.issues.filter((i: any) => i.severity === 'low').length
+          };
+
+          // statsが一致しているか確認
+          const statsMatch =
+            actualStats.total_issues === args.stats.total_issues &&
+            actualStats.critical === args.stats.critical &&
+            actualStats.high === args.stats.high &&
+            actualStats.medium === args.stats.medium &&
+            actualStats.low === args.stats.low;
+
+          if (!statsMatch) {
+            console.warn(`⚠️ [format_review] Stats mismatch detected, using actual counts`);
+          }
+
+          const validatedData = {
+            issues: args.issues,
+            summary: args.summary,
+            stats: actualStats
+          };
+
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `✅ Review data validated successfully!
 
 Formatted review (${args.issues.length} issues):
 ${JSON.stringify(validatedData, null, 2)}
 
 ✅ Validation passed! Now call submit_review with this exact data.`
-          }]
-        };
+            }]
+          };
+
+        } catch (error: any) {
+          console.error(`❌ [format_review] Unexpected error:`, error);
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `❌ Unexpected error during validation: ${error.message}
+
+Please check your input format and retry.`
+            }]
+          };
+        }
       }
     );
 
@@ -136,9 +221,6 @@ ${JSON.stringify(validatedData, null, 2)}
       });
 
       console.log('🤖 Starting Claude code review with Agent SDK...');
-
-    // stderrを収集
-      let stderrOutput = '';
 
     // Duplicate checker MCP server
       const duplicateCheckerServer = createDuplicateCheckerMcpServer();
