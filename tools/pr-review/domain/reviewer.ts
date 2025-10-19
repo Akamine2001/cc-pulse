@@ -90,7 +90,7 @@ export class PRReviewer {
       prompt: createPromptStream(promptText),
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
-        maxTurns: 70,
+        maxTurns: 20,
         mcpServers: {
           'review-output': reviewMcpServer,
           'duplicate-checker': duplicateCheckerServer
