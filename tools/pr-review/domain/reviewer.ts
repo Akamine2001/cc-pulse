@@ -63,13 +63,20 @@ export class PRReviewer {
     // Duplicate checker MCP server
     const duplicateCheckerServer = createDuplicateCheckerMcpServer();
 
-    const stream = agent.query({
+    const claudeCodePath = getClaudeCodeExecutablePath();
+    if (!claudeCodePath) {
+      throw new Error('Claude Code CLI not found. Please install it or set CLAUDE_PATH environment variable.');
+    }
+
+    const stream = query({
       prompt: createPromptStream(promptText),
-      mcpServers: {
-        'review-output': reviewMcpServer,
-        'duplicate-checker': duplicateCheckerServer
-      },
       options: {
+        pathToClaudeCodeExecutable: claudeCodePath,
+        maxTurns: 20,
+        mcpServers: {
+          'review-output': reviewMcpServer,
+          'duplicate-checker': duplicateCheckerServer
+        },
         allowedTools: [
           'mcp__review-output__submit_review',
           'mcp__duplicate-checker__check_duplicate_issue',
