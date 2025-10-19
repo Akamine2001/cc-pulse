@@ -171,8 +171,7 @@ ${JSON.stringify(validatedData, null, 2)}
       }
       });
 
-    // ストリームを処理
-    try {
+      // ストリームを処理
       for await (const message of stream) {
         if (message?.type === 'assistant' && message.message?.content) {
           for (const block of message.message.content) {
