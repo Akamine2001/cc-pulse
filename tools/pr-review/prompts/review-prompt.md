@@ -99,8 +99,12 @@ mcp__duplicate-checker__check_duplicate_issue({
 **CRITICAL - Tool Input Format**:
 - **issues, stats は配列・オブジェクトとして渡す(JSON文字列ではない)**
 - stats の各カウントは issues の内容と正確に一致させる
-- **format_reviewがエラーを返した場合、エラーメッセージを読んで修正し、必ず再度format_reviewを呼び出す**
-- エラーメッセージには具体的な修正方法が記載されているので、それに従って修正する
+- **format_reviewがバリデーションエラーを返した場合、エラーメッセージを読んで修正し、必ず再度format_reviewを呼び出す**
+- Zodバリデーションエラーには、どのフィールドが間違っているか明記されているので、それに従って修正する
+- よくあるエラー：
+  - "Expected array, received string" → JSON文字列ではなく配列オブジェクトを渡す
+  - "Required" → 必須フィールドが欠けている
+  - 型不一致 → 正しい型（string, number, object, array）で渡す
 - format_reviewが "✅ Validation passed!" を返すまで何度でもretryする
 
 ## 🔹 Phase 2: 最終提出(format_review成功後のみ)

@@ -42,135 +42,56 @@ export class PRReviewer {
       const promptText = this.buildPrompt(fileDiffs, projectContext, reviewGuidelines, existingConversations, commentsForDb);
 
       // MCP Server - 2段階検証方式
-      // STEP 1: フォーマット検証ツール（エラー非送出型）
+      // STEP 1: フォーマット検証ツール
       const formatReviewTool = tool(
       'format_review',
-      'Format and validate review data before submission. Use this to prepare your review in the correct structure. If validation fails, this tool will return error messages to help you fix the format.',
-      {},  // 空のスキーマ（任意の引数を許可）
-      async (args: any) => {
-        console.log(`📝 [format_review] Validating review data...`);
+      'Format and validate review data before submission. Call this with your review data to validate the format before calling submit_review.',
+      {
+        issues: z.array(ReviewIssueSchema),
+        summary: z.string(),
+        stats: ReviewStatsSchema
+      },
+      async (args) => {
+        // Zodバリデーション成功 - ここに到達した時点でスキーマは有効
+        console.log(`✅ [format_review] Validated ${args.issues.length} issues`);
 
-        try {
-          // 手動バリデーション
-          const errors: string[] = [];
+        const actualStats = {
+          total_issues: args.issues.length,
+          critical: args.issues.filter(i => i.severity === 'critical').length,
+          high: args.issues.filter(i => i.severity === 'high').length,
+          medium: args.issues.filter(i => i.severity === 'medium').length,
+          low: args.issues.filter(i => i.severity === 'low').length
+        };
 
-          // issuesのバリデーション
-          if (!Array.isArray(args.issues)) {
-            errors.push(`❌ "issues" must be an array, not a ${typeof args.issues}. Do NOT pass JSON string - pass the array object directly.`);
-          } else {
-            // 各issueの検証
-            const issueSchema = z.array(ReviewIssueSchema);
-            const issuesResult = issueSchema.safeParse(args.issues);
-            if (!issuesResult.success && 'error' in issuesResult) {
-              errors.push(`❌ "issues" array contains invalid items:\n${issuesResult.error.errors.map(e => `  - ${e.path.join('.')}: ${e.message}`).join('\n')}`);
-            }
-          }
+        // statsが一致しているか確認
+        const statsMatch =
+          actualStats.total_issues === args.stats.total_issues &&
+          actualStats.critical === args.stats.critical &&
+          actualStats.high === args.stats.high &&
+          actualStats.medium === args.stats.medium &&
+          actualStats.low === args.stats.low;
 
-          // summaryのバリデーション
-          if (typeof args.summary !== 'string') {
-            errors.push(`❌ "summary" must be a string, not a ${typeof args.summary}.`);
-          }
+        if (!statsMatch) {
+          console.warn(`⚠️ [format_review] Stats mismatch detected, using actual counts`);
+        }
 
-          // statsのバリデーション
-          if (typeof args.stats !== 'object' || args.stats === null) {
-            errors.push(`❌ "stats" must be an object, not a ${typeof args.stats}. Do NOT pass JSON string - pass the object directly.`);
-          } else {
-            const statsResult = ReviewStatsSchema.safeParse(args.stats);
-            if (!statsResult.success && 'error' in statsResult) {
-              errors.push(`❌ "stats" object is invalid:\n${statsResult.error.errors.map(e => `  - ${e.path.join('.')}: ${e.message}`).join('\n')}`);
-            }
-          }
+        const validatedData = {
+          issues: args.issues,
+          summary: args.summary,
+          stats: actualStats
+        };
 
-          // エラーがある場合はフィードバックを返す
-          if (errors.length > 0) {
-            console.warn(`⚠️ [format_review] Validation failed with ${errors.length} errors`);
-            return {
-              content: [{
-                type: 'text' as const,
-                text: `❌ Format validation failed. Please fix the following errors and retry:
-
-${errors.join('\n\n')}
-
-Expected format:
-{
-  "issues": [
-    {
-      "severity": "high" | "medium" | "low" | "critical",
-      "category": "string",
-      "description": "string",
-      "file_path": "string",
-      "line_range": { "start": number, "end": number },
-      "impact": "string",
-      "suggestion": "string"
-    }
-  ],
-  "summary": "string",
-  "stats": {
-    "total_issues": number,
-    "critical": number,
-    "high": number,
-    "medium": number,
-    "low": number
-  }
-}
-
-Please retry format_review with the corrected data.`
-              }]
-            };
-          }
-
-          // バリデーション成功 - statsの整合性チェック
-          console.log(`✅ [format_review] Validated ${args.issues.length} issues`);
-
-          const actualStats = {
-            total_issues: args.issues.length,
-            critical: args.issues.filter((i: any) => i.severity === 'critical').length,
-            high: args.issues.filter((i: any) => i.severity === 'high').length,
-            medium: args.issues.filter((i: any) => i.severity === 'medium').length,
-            low: args.issues.filter((i: any) => i.severity === 'low').length
-          };
-
-          // statsが一致しているか確認
-          const statsMatch =
-            actualStats.total_issues === args.stats.total_issues &&
-            actualStats.critical === args.stats.critical &&
-            actualStats.high === args.stats.high &&
-            actualStats.medium === args.stats.medium &&
-            actualStats.low === args.stats.low;
-
-          if (!statsMatch) {
-            console.warn(`⚠️ [format_review] Stats mismatch detected, using actual counts`);
-          }
-
-          const validatedData = {
-            issues: args.issues,
-            summary: args.summary,
-            stats: actualStats
-          };
-
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `✅ Review data validated successfully!
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `✅ Review data validated successfully!
 
 Formatted review (${args.issues.length} issues):
 ${JSON.stringify(validatedData, null, 2)}
 
 ✅ Validation passed! Now call submit_review with this exact data.`
-            }]
-          };
-
-        } catch (error: any) {
-          console.error(`❌ [format_review] Unexpected error:`, error);
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `❌ Unexpected error during validation: ${error.message}
-
-Please check your input format and retry.`
-            }]
-          };
-        }
+          }]
+        };
       }
     );
 
