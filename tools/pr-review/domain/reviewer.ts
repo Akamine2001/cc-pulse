@@ -3,10 +3,11 @@
  * Claude Agent SDKを使用してコードレビューを実施
  */
 
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query, tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
 import { getClaudeCodeExecutablePath } from '../../../src/utils/paths';
-import { ReviewResultSchema, type ReviewResult } from '../shared/schemas';
-import { createPromptStream, createOutputMcpServer } from '../infrastructure/mcp/mcp-server-factory';
+import { ReviewIssueSchema, ReviewStatsSchema, type ReviewResult } from '../shared/schemas';
+import { createPromptStream } from '../infrastructure/mcp/mcp-server-factory';
 import { createDuplicateCheckerMcpServer } from '../infrastructure/mcp/duplicate-checker-mcp';
 
 export class PRReviewer {
@@ -30,30 +31,47 @@ export class PRReviewer {
   ): Promise<ReviewResult> {
     const promptText = this.buildPrompt(diff, projectContext, reviewGuidelines, existingConversations, commentsForDb);
 
-    // MCP Server Factoryを使用してMCPサーバーを生成
-    const reviewMcpServer = createOutputMcpServer(
-      'review-output',
+    // MCP Server - オブジェクトリテラルで直接定義
+    const submitReviewTool = tool(
       'submit_review',
-      ReviewResultSchema,
-      (data) => {
+      'Submit the review result in structured format with schema validation',
+      {
+        issues: z.array(ReviewIssueSchema),
+        summary: z.string(),
+        stats: ReviewStatsSchema
+      },
+      async (args) => {
         // statsの整合性チェック（念のため）
         const actualStats = {
-          total_issues: data.issues.length,
-          critical: data.issues.filter(i => i.severity === 'critical').length,
-          high: data.issues.filter(i => i.severity === 'high').length,
-          medium: data.issues.filter(i => i.severity === 'medium').length,
-          low: data.issues.filter(i => i.severity === 'low').length
+          total_issues: args.issues.length,
+          critical: args.issues.filter(i => i.severity === 'critical').length,
+          high: args.issues.filter(i => i.severity === 'high').length,
+          medium: args.issues.filter(i => i.severity === 'medium').length,
+          low: args.issues.filter(i => i.severity === 'low').length
         };
 
         this.reviewResult = {
-          issues: data.issues,
-          summary: data.summary,
+          issues: args.issues,
+          summary: args.summary,
           stats: actualStats
         };
 
-        console.log(`✅ [MCP Callback] Review result received: ${data.issues.length} issues`);
+        console.log(`✅ [MCP Callback] Review result received: ${args.issues.length} issues`);
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Review result submitted successfully.'
+          }]
+        };
       }
     );
+
+    const reviewMcpServer = createSdkMcpServer({
+      name: 'review-output',
+      version: '1.0.0',
+      tools: [submitReviewTool]
+    });
 
     console.log('🤖 Starting Claude code review with Agent SDK...');
 
