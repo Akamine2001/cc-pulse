@@ -28,17 +28,6 @@ export class PRReviewer {
     existingConversations: string,
     commentsForDb: any[]
   ): Promise<ReviewResult> {
-    const claudeCodePath = getClaudeCodeExecutablePath();
-    if (!claudeCodePath) {
-      throw new Error(
-        'Claude Code CLI not found. Please install it or set CLAUDE_PATH environment variable.\n' +
-        'Install: https://docs.claude.com/en/docs/claude-code'
-      );
-    }
-
-    // レビュー結果をリセット
-    this.reviewResult = null;
-
     const promptText = this.buildPrompt(diff, projectContext, reviewGuidelines, existingConversations, commentsForDb);
 
     // MCP Server Factoryを使用してMCPサーバーを生成
@@ -61,6 +50,8 @@ export class PRReviewer {
           summary: data.summary,
           stats: actualStats
         };
+
+        console.log(`✅ [MCP Callback] Review result received: ${data.issues.length} issues`);
       }
     );
 
@@ -69,18 +60,16 @@ export class PRReviewer {
     // stderrを収集
     let stderrOutput = '';
 
-    // Duplicate Checker MCPサーバー
+    // Duplicate checker MCP server
     const duplicateCheckerServer = createDuplicateCheckerMcpServer();
 
-    const stream = query({
+    const stream = agent.query({
       prompt: createPromptStream(promptText),
+      mcpServers: {
+        'review-output': reviewMcpServer,
+        'duplicate-checker': duplicateCheckerServer
+      },
       options: {
-        pathToClaudeCodeExecutable: claudeCodePath,
-        maxTurns: 20,
-        mcpServers: {
-          'review-output': reviewMcpServer,
-          'duplicate-checker': duplicateCheckerServer
-        },
         allowedTools: [
           'mcp__review-output__submit_review',
           'mcp__duplicate-checker__check_duplicate_issue',
@@ -102,22 +91,11 @@ export class PRReviewer {
               const toolUse = block as any;
               console.log(`[DEBUG] Tool called: ${toolUse.name}`);
 
+              // submit_reviewの生データをログ出力（デバッグ用）
               if (toolUse.name === 'mcp__review-output__submit_review') {
-                const actualStats = {
-                  total_issues: toolUse.input.issues.length,
-                  critical: toolUse.input.issues.filter((i: any) => i.severity === 'critical').length,
-                  high: toolUse.input.issues.filter((i: any) => i.severity === 'high').length,
-                  medium: toolUse.input.issues.filter((i: any) => i.severity === 'medium').length,
-                  low: toolUse.input.issues.filter((i: any) => i.severity === 'low').length
-                };
-
-                this.reviewResult = {
-                  issues: toolUse.input.issues,
-                  summary: toolUse.input.summary,
-                  stats: actualStats
-                };
-
-                console.log(`[DEBUG] Review result captured: ${this.reviewResult.issues.length} issues`);
+                console.log(`[DEBUG] submit_review raw input:`, JSON.stringify(toolUse.input, null, 2));
+                console.log(`[DEBUG] issues type: ${typeof toolUse.input?.issues}`);
+                console.log(`[DEBUG] issues value:`, toolUse.input?.issues);
               }
             }
 
@@ -134,27 +112,24 @@ export class PRReviewer {
           break;
         }
       }
-    } catch (error) {
+
+      if (!this.reviewResult) {
+        throw new Error(
+          'Review failed: submit_review tool was not called by Claude.\n' +
+          `STDERR Output:\n${stderrOutput}`
+        );
+      }
+
+      return this.reviewResult;
+
+    } catch (error: any) {
       console.error('❌ Error during review stream processing');
-      if (error instanceof Error) {
-        console.error(`   Error: ${error.message}`);
-        console.error(`   Stack: ${error.stack}`);
-      }
-      if (stderrOutput) {
-        console.error(`   Claude Code STDERR:\n${stderrOutput}`);
-      }
+      console.error('   Error:', error.message);
+      console.error('   Stack:', error.stack);
+      console.error('   Claude Code STDERR:');
+      console.error(stderrOutput);
       throw error;
     }
-
-    if (!this.reviewResult) {
-      console.error('[ERROR] Failed to get review result from Claude (tool was not called)');
-      if (stderrOutput) {
-        console.error(`[ERROR] Claude Code STDERR output:\n${stderrOutput}`);
-      }
-      throw new Error('Failed to get review result from Claude (tool was not called)');
-    }
-
-    return this.reviewResult;
   }
 
   /**
