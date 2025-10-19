@@ -41,9 +41,9 @@ export type ReviewStats = z.infer<typeof ReviewStatsSchema>;
  * PRレビュー結果全体
  */
 export const ReviewResultSchema = z.object({
-  issues: z.array(ReviewIssueSchema).describe('検出された問題のリスト'),
-  summary: z.string().describe('レビューの総評'),
-  stats: ReviewStatsSchema.describe('統計情報')
+  issues: z.array(ReviewIssueSchema),
+  summary: z.string(),
+  stats: ReviewStatsSchema
 });
 
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
