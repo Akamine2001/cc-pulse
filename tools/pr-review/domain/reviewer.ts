@@ -217,6 +217,10 @@ Please check your input format and retry.`
       });
 
       console.log('🔧 [DEBUG] Review MCP Server created with tools:', reviewMcpServer);
+      console.log('🔧 [DEBUG] Server type:', reviewMcpServer.type);
+      console.log('🔧 [DEBUG] Server name:', reviewMcpServer.name);
+      console.log('🔧 [DEBUG] Has instance:', !!reviewMcpServer.instance);
+      console.log('🔧 [DEBUG] Instance registered tools:', reviewMcpServer.instance?._registeredTools);
       console.log('🤖 Starting Claude code review with Agent SDK...');
 
     // Duplicate checker MCP server
