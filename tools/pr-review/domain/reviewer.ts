@@ -46,7 +46,7 @@ export class PRReviewer {
       const formatReviewTool = tool(
       'format_review',
       'Format and validate review data before submission. Use this to prepare your review in the correct structure. If validation fails, this tool will return error messages to help you fix the format.',
-      {} as any,  // スキーマなしで生データを受け取る
+      z.object({}).passthrough(),  // 任意のプロパティを許可
       async (args: any) => {
         console.log(`📝 [format_review] Validating review data...`);
 
@@ -216,6 +216,7 @@ Please check your input format and retry.`
       tools: [formatReviewTool, submitReviewTool]
       });
 
+      console.log('🔧 [DEBUG] Review MCP Server created with tools:', reviewMcpServer);
       console.log('🤖 Starting Claude code review with Agent SDK...');
 
     // Duplicate checker MCP server
