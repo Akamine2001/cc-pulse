@@ -13,17 +13,31 @@
 
 これにより、既存のレビューコメントがembedding化され、重複チェックが可能になります。
 
-# STEP 2: コードレビュー実施
+# STEP 2: PR差分の読み込み（選択的）
 
-# プロジェクトコンテキスト
-{{PROJECT_CONTEXT}}
+PR差分はファイル単位で以下の一時ファイルに保存されています:
 
-# PR差分
-```diff
-{{DIFF}}
+{{DIFF_FILES_LIST}}
+
+**IMPORTANT - 選択的読み込み**:
+- レビューに必要なファイルを`Read`ツールで読み込んでください
+- lockファイル（package-lock.json, bun.lockbなど）は**差分が大きいため、必要な場合のみ読み込んでください**
+- 通常のソースコードファイルは全て読み込むことを推奨します
+
+**読み込み例**:
+```
+Read(file_path="/tmp/pr-review/xxx-0-src_cli.ts.diff")
+Read(file_path="/tmp/pr-review/xxx-1-src_utils_helper.ts.diff")
 ```
 
-# レビュー観点
+差分を読み込んだら、以下のプロジェクトコンテキストとレビュー観点に従ってレビューしてください。
+
+# STEP 3: コードレビュー実施
+
+## プロジェクトコンテキスト
+{{PROJECT_CONTEXT}}
+
+## レビュー観点
 {{REVIEW_GUIDELINES}}
 
 {{EXISTING_CONVERSATIONS}}
@@ -50,7 +64,7 @@ mcp__duplicate-checker__check_duplicate_issue({
 - 同じ問題だと判断した場合 → issuesに含めない
 - 異なる問題だと判断した場合 → issuesに含める
 
-# STEP 3: 結果の提出(2段階プロセス)
+# STEP 4: 結果の提出(2段階プロセス)
 
 レビューが完了したら、以下の**2段階プロセス**で結果を提出してください:
 

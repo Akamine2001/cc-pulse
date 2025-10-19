@@ -7,6 +7,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import type { FileDiff } from './diff-file-manager';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -14,7 +15,7 @@ const __dirname = dirname(__filename);
 /**
  * レビュープロンプトを読み込んで展開
  *
- * @param diff PR差分
+ * @param fileDiffs ファイル単位の差分情報の配列
  * @param projectContext プロジェクトコンテキスト
  * @param reviewGuidelines レビュー観点
  * @param existingConversations 既存Conversation
@@ -22,7 +23,7 @@ const __dirname = dirname(__filename);
  * @returns 展開済みプロンプト
  */
 export function loadReviewPrompt(
-  diff: string,
+  fileDiffs: FileDiff[],
   projectContext: string,
   reviewGuidelines: string,
   existingConversations: string,
@@ -36,10 +37,20 @@ export function loadReviewPrompt(
 
   const template = readFileSync(promptPath, 'utf-8');
 
+  // ファイルリストを生成
+  const diffFilesList = fileDiffs.map((fd, index) => {
+    const sizeKb = (fd.size / 1024).toFixed(1);
+    const isLockFile = fd.filePath.match(/lock|yarn\.lock|package-lock\.json/i);
+    const sizeWarning = parseFloat(sizeKb) > 50 ? ` ⚠️ **大きなファイル (${sizeKb} KB)** - 必要な場合のみ読込` : '';
+    const lockWarning = isLockFile ? ' 🔒 **lockファイル** - 通常はレビュー不要' : '';
+
+    return `${index + 1}. **${fd.filePath}** (${sizeKb} KB)${sizeWarning}${lockWarning}\n   - パス: \`${fd.tempFilePath}\``;
+  }).join('\n\n');
+
   return template
     .replace('{{COMMENTS_JSON}}', commentsJson)
+    .replace('{{DIFF_FILES_LIST}}', diffFilesList)
     .replace('{{PROJECT_CONTEXT}}', projectContext)
-    .replace('{{DIFF}}', diff)
     .replace('{{REVIEW_GUIDELINES}}', reviewGuidelines)
     .replace('{{EXISTING_CONVERSATIONS}}', existingConversations);
 }

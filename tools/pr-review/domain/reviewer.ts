@@ -10,6 +10,7 @@ import { ReviewIssueSchema, ReviewStatsSchema, type ReviewResult } from '../shar
 import { createPromptStream } from '../infrastructure/mcp/mcp-server-factory';
 import { createDuplicateCheckerMcpServer } from '../infrastructure/mcp/duplicate-checker-mcp';
 import { loadReviewPrompt } from '../infrastructure/file/prompt-loader';
+import { saveDiffByFiles, deleteTempDiffFiles, type FileDiff } from '../infrastructure/file/diff-file-manager';
 
 export class PRReviewer {
   private reviewResult: ReviewResult | null = null;
@@ -30,11 +31,16 @@ export class PRReviewer {
     existingConversations: string,
     commentsForDb: any[]
   ): Promise<ReviewResult> {
-    const promptText = this.buildPrompt(diff, projectContext, reviewGuidelines, existingConversations, commentsForDb);
+    // 差分をファイル単位で分割して一時ファイルに保存
+    const fileDiffs = saveDiffByFiles(diff);
 
-    // MCP Server - 2段階検証方式
-    // STEP 1: フォーマット検証ツール
-    const formatReviewTool = tool(
+    try {
+      // プロンプトを生成（ファイル単位の差分リストを渡す）
+      const promptText = this.buildPrompt(fileDiffs, projectContext, reviewGuidelines, existingConversations, commentsForDb);
+
+      // MCP Server - 2段階検証方式
+      // STEP 1: フォーマット検証ツール
+      const formatReviewTool = tool(
       'format_review',
       'Format and validate review data before submission. Use this to prepare your review in the correct structure.',
       {
@@ -88,7 +94,7 @@ ${JSON.stringify(validatedData, null, 2)}
     );
 
     // STEP 2: 最終提出ツール
-    const submitReviewTool = tool(
+      const submitReviewTool = tool(
       'submit_review',
       'Submit the final review result. ONLY call this after format_review succeeds.',
       {
@@ -123,26 +129,26 @@ ${JSON.stringify(validatedData, null, 2)}
       }
     );
 
-    const reviewMcpServer = createSdkMcpServer({
+      const reviewMcpServer = createSdkMcpServer({
       name: 'review-output',
       version: '1.0.0',
       tools: [formatReviewTool, submitReviewTool]
-    });
+      });
 
-    console.log('🤖 Starting Claude code review with Agent SDK...');
+      console.log('🤖 Starting Claude code review with Agent SDK...');
 
     // stderrを収集
-    let stderrOutput = '';
+      let stderrOutput = '';
 
     // Duplicate checker MCP server
-    const duplicateCheckerServer = createDuplicateCheckerMcpServer();
+      const duplicateCheckerServer = createDuplicateCheckerMcpServer();
 
-    const claudeCodePath = getClaudeCodeExecutablePath();
-    if (!claudeCodePath) {
-      throw new Error('Claude Code CLI not found. Please install it or set CLAUDE_PATH environment variable.');
-    }
+      const claudeCodePath = getClaudeCodeExecutablePath();
+      if (!claudeCodePath) {
+        throw new Error('Claude Code CLI not found. Please install it or set CLAUDE_PATH environment variable.');
+      }
 
-    const stream = query({
+      const stream = query({
       prompt: createPromptStream(promptText),
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
@@ -152,6 +158,7 @@ ${JSON.stringify(validatedData, null, 2)}
           'duplicate-checker': duplicateCheckerServer
         },
         allowedTools: [
+          'Read',  // 差分ファイル読み込み用
           'mcp__review-output__format_review',
           'mcp__review-output__submit_review',
           'mcp__duplicate-checker__check_duplicate_issue',
@@ -162,7 +169,7 @@ ${JSON.stringify(validatedData, null, 2)}
           console.error(`[STDERR] ${data}`);
         }
       }
-    });
+      });
 
     // ストリームを処理
     try {
@@ -204,21 +211,24 @@ ${JSON.stringify(validatedData, null, 2)}
 
       return this.reviewResult;
 
-    } catch (error: any) {
+      } catch (error: any) {
       console.error('❌ Error during review stream processing');
       console.error('   Error:', error.message);
       console.error('   Stack:', error.stack);
       console.error('   Claude Code STDERR:');
       console.error(stderrOutput);
       throw error;
-    }
+      } finally {
+      // 一時ファイルをクリーンアップ
+      deleteTempDiffFiles(fileDiffs);
+      }
   }
 
   /**
    * レビュー用のプロンプトを構築
    */
   private buildPrompt(
-    diff: string,
+    fileDiffs: FileDiff[],
     projectContext: string,
     reviewGuidelines: string,
     existingConversations: string,
@@ -226,7 +236,7 @@ ${JSON.stringify(validatedData, null, 2)}
   ): string {
     const commentsJson = JSON.stringify(commentsForDb, null, 2);
 
-    // 外部プロンプトMDファイルから読み込み
-    return loadReviewPrompt(diff, projectContext, reviewGuidelines, existingConversations, commentsJson);
+    // 外部プロンプトMDファイルから読み込み（差分はファイルリストで指定）
+    return loadReviewPrompt(fileDiffs, projectContext, reviewGuidelines, existingConversations, commentsJson);
   }
 }
