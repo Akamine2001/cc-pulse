@@ -9,6 +9,7 @@ import type { Octokit } from 'octokit';
 import { PRReviewer } from '../domain/reviewer';
 import { processPreviousConversations } from './comment-processor';
 import { collectExistingConversations, formatConversationsForPrompt } from '../domain/conversation-collector';
+import { collectCommentsForDuplicateChecker } from '../domain/duplicate-checker-initializer';
 import { readPRDiff } from '../infrastructure/file/diff-reader';
 import { readProjectContext } from '../infrastructure/file/context-reader';
 import { readReviewGuidelines } from '../infrastructure/file/guidelines-reader';
@@ -83,6 +84,18 @@ export class ReviewOrchestrator {
       const existingConversationsText = formatConversationsForPrompt(existingConversations);
       console.log(`✅ Found ${existingConversations.length} existing conversations`);
 
+      // 6.5. Duplicate Checker DBを初期化
+      console.log('📋 Initializing duplicate checker database...');
+      const commentsForDb = await collectCommentsForDuplicateChecker(
+        this.octokit,
+        this.owner,
+        this.repo,
+        this.prNumber
+      );
+      console.log(`✅ Collected ${commentsForDb.length} comments for duplicate checker`);
+
+      // TODO: MCPツールでDB初期化を呼び出す（Phase 3-2で実装）
+
       // 7. レビュー実施
       console.log('');
       console.log('🤖 Starting code review...');
@@ -91,7 +104,8 @@ export class ReviewOrchestrator {
         diff,
         context,
         reviewGuidelines,
-        existingConversationsText
+        existingConversationsText,
+        commentsForDb
       );
       console.log(`✅ Review completed: ${reviewResult.stats.total_issues} issues found`);
 

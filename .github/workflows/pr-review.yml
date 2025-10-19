@@ -110,6 +110,42 @@ jobs:
           restore-keys: |
             serena-cache-${{ runner.os }}-
 
+      # Embeddingモデルキャッシュ
+      - name: Cache Embedding Model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cc-pulse/models/embeddinggemma-q4
+          key: embedding-model-v1
+
+      # レビューコメントDBキャッシュ（PR単位）
+      - name: Cache Review Comments DB
+        uses: actions/cache@v4
+        with:
+          path: .pr-review-comments.db
+          key: pr-review-db-${{ github.event.pull_request.number }}
+
+      # Python依存関係インストール（mcp/）
+      - name: Install Python dependencies (mcp)
+        run: |
+          cd mcp
+          uv sync
+
+      # Python依存関係インストール（tools/pr-review/mcp/）
+      - name: Install Python dependencies (pr-review)
+        run: |
+          cd tools/pr-review/mcp
+          uv sync
+
+      # Embeddingモデルのダウンロード（初回 or キャッシュミス時）
+      - name: Download Embedding Model if needed
+        run: |
+          if [ ! -d ~/.cc-pulse/models/embeddinggemma-q4 ]; then
+            echo "Downloading Embedding Model..."
+            cd mcp && uv run python download_model.py
+          else
+            echo "✅ Embedding model already cached"
+          fi
+
       # PR差分取得
       - name: Get PR Diff
         id: get-diff

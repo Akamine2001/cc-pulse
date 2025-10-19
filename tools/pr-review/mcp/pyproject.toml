@@ -1,7 +1,7 @@
 [project]
-name = "cc-pulse-mcp"
+name = "pr-review-duplicate-checker"
 version = "0.1.0"
-description = "MCP Server for article similarity search with EmbeddingGemma"
+description = "MCP Server for duplicate review issue detection with embedding similarity"
 requires-python = ">=3.10"
 
 dependencies = [
