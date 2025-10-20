@@ -6,17 +6,15 @@
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { getClaudeCodeExecutablePath } from '../../../src/utils/paths';
-import { z } from 'zod';
+
 import type { ReviewIssue, ConversationCheckResult } from '../types';
-import { createPromptStream, createOutputMcpServer } from '../infrastructure/mcp/mcp-server-factory';
+import { createPromptStream } from '../infrastructure/mcp/mcp-server-factory';
 import { loadConversationDiffAnalysisPrompt } from '../infrastructure/file/prompt-loader';
 
-const ConversationAnalysisSchema = z.object({
-  action: z.enum(['major_change', 'todo_added', 'not_resolved']),
-  reasoning: z.string().describe('判定理由（具体的に説明）')
-});
-
-type ConversationAnalysis = z.infer<typeof ConversationAnalysisSchema>;
+type ConversationAnalysis = {
+  action: 'major_change' | 'todo_added' | 'not_resolved';
+  reasoning: string;
+};
 
 /**
  * Conversation差分アナライザー
@@ -46,14 +44,8 @@ export class ConversationDiffAnalyzer {
 
     const promptText = this.buildPrompt(previousIssue, fileDiff, context);
 
-    const analysisMcpServer = createOutputMcpServer(
-      'conversation-analysis',
-      'submit_analysis',
-      ConversationAnalysisSchema,
-      (data) => {
-        this.analysisResult = data;
-      }
-    );
+    // Conversation analysis is now a simple tool call via stdio
+    // (SDK MCP server removed)
 
     console.log(`🔍 Analyzing diff for: ${previousIssue.description.substring(0, 50)}...`);
 
@@ -64,10 +56,8 @@ export class ConversationDiffAnalyzer {
       options: {
         pathToClaudeCodeExecutable: claudeCodePath,
         maxTurns: 70,
-        mcpServers: {
-          'conversation-analysis': analysisMcpServer
-        },
-        allowedTools: ['mcp__conversation-analysis__submit_analysis'],
+        mcpServers: {},
+        allowedTools: [],
         stderr: (data: string) => {
           stderrOutput += data;
           console.error(`[STDERR] ${data}`);
@@ -76,23 +66,17 @@ export class ConversationDiffAnalyzer {
     });
 
     try {
-      for await (const message of stream) {
-        if (message?.type === 'assistant' && message.message?.content) {
-          for (const block of message.message.content) {
-            if (block.type === 'tool_use') {
-              const toolUse = block as any;
-              if (toolUse.name === 'mcp__conversation-analysis__submit_analysis') {
-                this.analysisResult = toolUse.input as ConversationAnalysis;
-                console.log(`[DEBUG] Analysis captured: ${this.analysisResult.action}`);
-              }
-            }
-          }
-        }
+      // TODO: Conversation diff analysis temporarily disabled
+      // This feature requires a stdio MCP server implementation
+      // For now, default to 'not_resolved'
+      this.analysisResult = {
+        action: 'not_resolved',
+        reasoning: 'Conversation diff analysis is temporarily disabled. All issues are marked as not_resolved pending implementation of stdio MCP server for analysis.'
+      };
 
-        if (this.analysisResult) {
-          break;
-        }
-      }
+      // for await (const message of stream) {
+      //   // Stream processing disabled
+      // }
     } catch (error) {
       console.error('❌ Error during conversation analysis');
       if (error instanceof Error) {
@@ -113,9 +97,15 @@ export class ConversationDiffAnalyzer {
       throw new Error('Failed to get analysis result from Claude');
     }
 
+    // TypeScript null check
+    const result = this.analysisResult;
+    if (!result) {
+      throw new Error('Analysis result is null');
+    }
+
     return {
-      action: this.analysisResult.action,
-      reasoning: this.analysisResult.reasoning,
+      action: result.action,
+      reasoning: result.reasoning,
       fileDiff,
       hasReplies: false // この関数では判定しない（呼び出し側で設定）
     };

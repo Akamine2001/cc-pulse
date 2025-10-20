@@ -8,8 +8,6 @@
  *   AsyncIterableでプロンプトを渡す必要がある
  */
 
-import { tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
-import { z } from 'zod';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 
 /**
@@ -33,41 +31,4 @@ export async function* createPromptStream(promptText: string): AsyncIterable<SDK
   };
 }
 
-/**
- * 出力用MCPサーバーを作成
- *
- * レビュー結果や修正判定結果を受け取るためのMCPサーバーを生成する。
- *
- * @param name MCPサーバー名
- * @param toolName ツール名
- * @param schema Zodスキーマ
- * @param onSubmit データ送信時のコールバック
- * @returns MCPサーバーインスタンス
- */
-export function createOutputMcpServer<T extends z.ZodRawShape>(
-  name: string,
-  toolName: string,
-  schema: z.ZodObject<T>,
-  onSubmit: (data: z.infer<z.ZodObject<T>>) => void
-) {
-  const submitTool = tool(
-    toolName,
-    `Submit the ${name} result in structured format with schema validation`,
-    schema.shape,
-    async (args) => {
-      onSubmit(args as z.infer<z.ZodObject<T>>);
-      return {
-        content: [{
-          type: 'text' as const,
-          text: `${name} result submitted successfully.`
-        }]
-      };
-    }
-  );
-
-  return createSdkMcpServer({
-    name,
-    version: '1.0.0',
-    tools: [submitTool]
-  });
-}
+// SDK MCP server functions removed - now using stdio MCP servers only

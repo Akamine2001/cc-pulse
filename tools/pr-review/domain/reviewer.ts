@@ -3,10 +3,9 @@
  * Claude Agent SDKを使用してコードレビューを実施
  */
 
-import { query, tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
-import { z } from 'zod';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 import { getClaudeCodeExecutablePath } from '../../../src/utils/paths';
-import { ReviewIssueSchema, ReviewStatsSchema, type ReviewResult } from '../shared/schemas';
+import type { ReviewResult } from '../shared/schemas';
 import { createPromptStream } from '../infrastructure/mcp/mcp-server-factory';
 import { createDuplicateCheckerMcpServer } from '../infrastructure/mcp/duplicate-checker-mcp';
 import { loadReviewPrompt } from '../infrastructure/file/prompt-loader';
@@ -41,107 +40,21 @@ export class PRReviewer {
       // プロンプトを生成（ファイル単位の差分リストを渡す）
       const promptText = this.buildPrompt(fileDiffs, projectContext, reviewGuidelines, existingConversations, commentsForDb);
 
-      // MCP Server - 2段階検証方式
-      // STEP 1: フォーマット検証ツール
-      const formatReviewTool = tool(
-      'format_review',
-      'Format and validate review data before submission. Call this with your review data to validate the format before calling submit_review.',
-      {
-        issues: z.array(ReviewIssueSchema),
-        summary: z.string(),
-        stats: ReviewStatsSchema
-      },
-      async (args) => {
-        // Zodバリデーション成功 - ここに到達した時点でスキーマは有効
-        console.log(`✅ [format_review] Validated ${args.issues.length} issues`);
-
-        const actualStats = {
-          total_issues: args.issues.length,
-          critical: args.issues.filter(i => i.severity === 'critical').length,
-          high: args.issues.filter(i => i.severity === 'high').length,
-          medium: args.issues.filter(i => i.severity === 'medium').length,
-          low: args.issues.filter(i => i.severity === 'low').length
-        };
-
-        // statsが一致しているか確認
-        const statsMatch =
-          actualStats.total_issues === args.stats.total_issues &&
-          actualStats.critical === args.stats.critical &&
-          actualStats.high === args.stats.high &&
-          actualStats.medium === args.stats.medium &&
-          actualStats.low === args.stats.low;
-
-        if (!statsMatch) {
-          console.warn(`⚠️ [format_review] Stats mismatch detected, using actual counts`);
+      // Review output MCP server (stdio)
+      const reviewMcpServer = {
+        type: 'stdio' as const,
+        command: 'uv',
+        args: [
+          'run',
+          '--directory', `${__dirname}/../mcp`,
+          'python',
+          `${__dirname}/../mcp/review-output-server.py`
+        ],
+        env: {
+          PYTHONUNBUFFERED: '1'
         }
+      };
 
-        const validatedData = {
-          issues: args.issues,
-          summary: args.summary,
-          stats: actualStats
-        };
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `✅ Review data validated successfully!
-
-Formatted review (${args.issues.length} issues):
-${JSON.stringify(validatedData, null, 2)}
-
-✅ Validation passed! Now call submit_review with this exact data.`
-          }]
-        };
-      }
-    );
-
-    // STEP 2: 最終提出ツール
-      const submitReviewTool = tool(
-      'submit_review',
-      'Submit the final review result. ONLY call this after format_review succeeds.',
-      {
-        issues: z.array(ReviewIssueSchema),
-        summary: z.string(),
-        stats: ReviewStatsSchema
-      },
-      async (args) => {
-        // statsの整合性チェック（念のため）
-        const actualStats = {
-          total_issues: args.issues.length,
-          critical: args.issues.filter(i => i.severity === 'critical').length,
-          high: args.issues.filter(i => i.severity === 'high').length,
-          medium: args.issues.filter(i => i.severity === 'medium').length,
-          low: args.issues.filter(i => i.severity === 'low').length
-        };
-
-        this.reviewResult = {
-          issues: args.issues,
-          summary: args.summary,
-          stats: actualStats
-        };
-
-        console.log(`✅ [submit_review] Review result received: ${args.issues.length} issues`);
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: 'Review result submitted successfully.'
-          }]
-        };
-      }
-    );
-
-      const reviewMcpServer = createSdkMcpServer({
-      name: 'review-output',
-      version: '1.0.0',
-      tools: [formatReviewTool, submitReviewTool]
-      });
-
-      console.log('🔧 [DEBUG] Review MCP Server created with tools:', reviewMcpServer);
-      console.log('🔧 [DEBUG] Server type:', reviewMcpServer.type);
-      console.log('🔧 [DEBUG] Server name:', reviewMcpServer.name);
-      console.log('🔧 [DEBUG] Has instance:', !!reviewMcpServer.instance);
-      console.log('🔧 [DEBUG] Instance registered tools:', reviewMcpServer.instance?._registeredTools);
       console.log('🤖 Starting Claude code review with Agent SDK...');
 
     // Duplicate checker MCP server
@@ -191,6 +104,12 @@ ${JSON.stringify(validatedData, null, 2)}
               console.log(`[DEBUG] Tool called: ${toolUse.name}`);
               console.log(`[DEBUG] Tool input (full):`, JSON.stringify(toolUse.input, null, 2));
 
+              // submit_review が呼ばれたら、引数を直接取得してレビュー結果として保存
+              if (toolUse.name === 'mcp__review-output__submit_review') {
+                this.reviewResult = toolUse.input;
+                console.log(`✅ [submit_review] Review result captured from tool input: ${toolUse.input.issues?.length || 0} issues`);
+              }
+
               // review-output系ツールの詳細な型情報
               if (toolUse.name === 'mcp__review-output__format_review' || 
                   toolUse.name === 'mcp__review-output__submit_review') {
@@ -209,7 +128,7 @@ ${JSON.stringify(validatedData, null, 2)}
             }
 
             // ツール実行結果ログ（新規追加：エラー確認用）
-            if (block.type === 'tool_result') {
+            if ((block as any).type === 'tool_result') {
               const toolResult = block as any;
               console.log(`[DEBUG] Tool result received`);
               console.log(`[DEBUG] Tool use ID: ${toolResult.tool_use_id}`);
