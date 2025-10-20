@@ -72,6 +72,7 @@ mcp__duplicate-checker__check_duplicate_issue({
 
 まず **mcp__review-output__format_review** を呼び出してデータ形式を検証:
 
+**EXAMPLE - Correct format with object stats**:
 ```json
 {
   "issues": [
@@ -96,30 +97,75 @@ mcp__duplicate-checker__check_duplicate_issue({
 }
 ```
 
+**⚠️ CRITICAL**: The `stats` field MUST be an object (as shown above), NOT a JSON string.
+- ✅ Correct: `"stats": {"total_issues": 1, "critical": 0, ...}`
+- ❌ Wrong: `"stats": "{\"total_issues\": 1, \"critical\": 0, ...}"`
+
 **CRITICAL - Tool Input Format**:
-- **issues, stats は配列・オブジェクトとして渡す(JSON文字列ではない)**
+
+⚠️ **VERY IMPORTANT - stats must be an OBJECT, NOT a JSON string!**
+
+**Common mistake to avoid**:
+```json
+// ❌ WRONG - stats as JSON string
+{
+  "issues": [...],
+  "stats": "{\n  \"total_issues\": 1,\n  \"critical\": 0\n}"  // ← STRING! This will fail!
+}
+
+// ✅ CORRECT - stats as object
+{
+  "issues": [...],
+  "stats": {
+    "total_issues": 1,
+    "critical": 0,
+    "high": 1,
+    "medium": 0,
+    "low": 0
+  }  // ← OBJECT! This is correct!
+}
+```
+
+**Rules**:
+- **issues は配列として渡す** (NOT a JSON string)
+- **stats はオブジェクトとして渡す** (NOT a JSON string)
 - stats の各カウントは issues の内容と正確に一致させる
+- Never wrap objects or arrays in quotes - pass them directly as structured data
 - **format_reviewがバリデーションエラーを返した場合、エラーメッセージを読んで修正し、必ず再度format_reviewを呼び出す**
-- Zodバリデーションエラーには、どのフィールドが間違っているか明記されているので、それに従って修正する
-- よくあるエラー：
-  - "Expected array, received string" → JSON文字列ではなく配列オブジェクトを渡す
-  - "Required" → 必須フィールドが欠けている
-  - 型不一致 → 正しい型（string, number, object, array）で渡す
+- よくあるエラーと修正方法：
+  - **"'...' is not of type 'object'"** → statsをJSON文字列ではなく、オブジェクトとして渡す
+    - ❌ `"stats": "{\"total_issues\": 1}"`
+    - ✅ `"stats": {"total_issues": 1}`
+  - **"Expected array, received string"** → issuesをJSON文字列ではなく配列として渡す
+    - ❌ `"issues": "[{...}]"`
+    - ✅ `"issues": [{...}]`
+  - **"Required"** → 必須フィールドが欠けている
+  - **型不一致** → 正しい型（string, number, object, array）で渡す
+- **IMPORTANT**: Do NOT stringify objects or arrays. Pass them as direct data structures.
 - format_reviewが "✅ Validation passed!" を返すまで何度でもretryする
 
 ## 🔹 Phase 2: 最終提出(format_review成功後のみ)
 
 format_review が成功したら、**同じデータ**で **mcp__review-output__submit_review** を呼び出す:
 
+**EXAMPLE - Use the EXACT SAME format as format_review**:
 ```json
 {
-  "issues": [...同じデータ...],
-  "summary": "...同じデータ...",
-  "stats": {...同じデータ...}
+  "issues": [...same array...],
+  "summary": "...same string...",
+  "stats": {
+    "total_issues": 1,
+    "critical": 0,
+    "high": 1,
+    "medium": 0,
+    "low": 0
+  }
 }
 ```
 
-**重要**:
+**⚠️ CRITICAL REMINDER**: 
+- **stats MUST be an object**, NOT a string: `{"total_issues": 1, ...}` ✅
+- **DO NOT stringify**: `"{\"total_issues\": 1, ...}"` ❌
 - Phase 1で検証済みのデータをそのまま使用
 - 必ず両方のツールを呼び出す(テキストでの返答は不要)
 - エラーが出たら即座にフォーマットを修正してretry
