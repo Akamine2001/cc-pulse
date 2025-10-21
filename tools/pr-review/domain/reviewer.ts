@@ -40,24 +40,19 @@ export class PRReviewer {
       // プロンプトを生成（ファイル単位の差分リストを渡す）
       const promptText = this.buildPrompt(fileDiffs, projectContext, reviewGuidelines, existingConversations, commentsForDb);
 
-      // Review output MCP server (stdio)
-      const reviewMcpServer = {
-        type: 'stdio' as const,
-        command: 'uv',
-        args: [
-          'run',
-          '--directory', `${__dirname}/../mcp`,
-          'python',
-          `${__dirname}/../mcp/review-output-server.py`
-        ],
-        env: {
-          PYTHONUNBUFFERED: '1'
-        }
-      };
-
       console.log('🤖 Starting Claude code review with Agent SDK...');
 
-    // Duplicate checker MCP server
+      // Review output MCP server (stdio - TypeScript)
+      const reviewMcpServer = {
+        type: 'stdio' as const,
+        command: 'bun',
+        args: [
+          'run',
+          `${__dirname}/../mcp/review-output-server.ts`
+        ]
+      };
+
+      // Duplicate checker MCP server (stdio - Python)
       const duplicateCheckerServer = createDuplicateCheckerMcpServer();
 
       const claudeCodePath = getClaudeCodeExecutablePath();

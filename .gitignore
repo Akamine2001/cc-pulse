@@ -58,5 +58,10 @@ mcp/.venv/
 # Built CSS (Tailwind)
 src/templates/styles.built.css
 
+# PR Review temporary files and databases
+tools/pr-review/mcp/.pr-review-comments.db
+tools/pr-review/mcp/log.md
+pr-diff.txt
+
 # Private development documentation
 docs/

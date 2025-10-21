@@ -18,6 +18,22 @@ import { formatIssueAsInlineComment } from '../../shared/formatter';
  * @param headSha コミットSHA
  * @param prNumber PR番号
  */
+// TODO: コメント投稿失敗の原因調査
+// GitHub API の "pull_request_review_thread.line could not be resolved" エラーが発生する場合がある
+// 原因:
+//   1. Claudeが指定した行番号が、実際のファイル全体の行番号である可能性（差分内の行番号ではない）
+//   2. PR差分が大きなファイルの一部のみを含んでおり、指定行が差分に存在しない
+//   3. ファイル全体の行番号と差分内の行番号の混同
+// 対策案:
+//   - Claudeに「差分内に存在する行番号のみを指定する」ように明示的に指示
+//   - または、差分パーサーで行番号を検証し、存在しない場合はコメント投稿をスキップ
+//   - 行番号マッピング機能の追加（ファイル全体の行番号 → 差分内の行番号）
+//   - **推奨**: GitHubClientにバリデーション機能を追加
+//     - postReviewComment() 実行前に、指定された行番号が差分に存在するかチェック
+//     - 存在しない場合は警告ログを出力してスキップ（エラーにしない）
+//     - DiffParserを使って差分内の有効な行範囲を取得し、その範囲内かを検証
+//     - 例: `if (!diffParser.isLineInDiff(filePath, lineNumber)) { console.warn('Line not in diff, skipping...'); return; }`
+
 export async function postInlineComments(
   githubClient: GitHubClient,
   reviewResult: ReviewResult,
