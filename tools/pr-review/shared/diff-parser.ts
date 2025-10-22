@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 
 /**
  * PR差分から該当箇所のコードを取得
@@ -55,6 +55,23 @@ export class DiffParser {
         })
         .join('\n');
     } catch (error) {
+      // ファイルが存在しない場合、削除されたファイルか実装エラーかを区別
+      if (error instanceof Error && (error as any).code === 'ENOENT') {
+        if (!existsSync(filePath)) {
+          // 削除されたファイル（PRで削除された）
+          console.error(`⚠️ Deleted file (cannot read): ${filePath}`);
+          console.error(`   This file was deleted in this PR`);
+          return `[このファイルは削除されました]`;
+        } else {
+          // 実装エラー（存在するのに読めない）
+          console.error(`❌ Implementation error: ${filePath}`);
+          console.error(`   File exists but cannot be read`);
+          console.error(`   Error: ${error.message}`);
+          return `[実装エラー: ファイル読み込み失敗]`;
+        }
+      }
+
+      // その他のエラー
       console.error(`❌ Failed to read file ${filePath}`);
       if (error instanceof Error) {
         console.error(`   Error: ${error.message}`);

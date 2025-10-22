@@ -163,4 +163,21 @@ export class GitHubClient {
       return 1; // エラー時は元のコメントのみとして扱う
     }
   }
+
+  /**
+   * レビューコメントへの返信を投稿
+   *
+   * @param prNumber PR番号
+   * @param commentId コメントID
+   * @param body コメント本文
+   */
+  async postReplyComment(prNumber: number, commentId: number, body: string): Promise<void> {
+    await this.octokit.rest.pulls.createReplyForReviewComment({
+      owner: this.owner,
+      repo: this.repo,
+      pull_number: prNumber,
+      comment_id: commentId,
+      body
+    });
+  }
 }

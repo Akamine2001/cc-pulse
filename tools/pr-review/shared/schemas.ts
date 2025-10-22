@@ -72,3 +72,19 @@ export const IssueResolutionSchema = z.object({
 });;
 
 export type IssueResolution = z.infer<typeof IssueResolutionSchema>;
+
+/**
+ * 既存のレビューコメント
+ * GitHub APIから取得した過去のレビューコメント情報
+ */
+export interface ReviewComment {
+  comment_id: number;
+  file_path: string;
+  line: number | null;
+  category: string;
+  severity: string;
+  description: string;
+  original_comment: string;
+  created_at: string;
+  updated_at: string;
+}

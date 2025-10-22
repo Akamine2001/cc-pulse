@@ -93,6 +93,11 @@ export function saveDiffByFiles(diff: string): FileDiff[] {
     if (!match) return;
 
     const filePath = match[2]; // b側のパス（新しい方）
+    if (!filePath) {
+      console.error(`[WARN] Could not extract file path from diff block ${index}`);
+      return;
+    }
+
     const size = block.length;
 
     // 一時ファイルに保存

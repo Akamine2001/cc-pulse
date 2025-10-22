@@ -7,7 +7,6 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { getClaudeCodeExecutablePath } from '../../../src/utils/paths';
 import type { ReviewResult } from '../shared/schemas';
 import { createPromptStream } from '../infrastructure/mcp/mcp-server-factory';
-import { createDuplicateCheckerMcpServer } from '../infrastructure/mcp/duplicate-checker-mcp';
 import { loadReviewPrompt } from '../infrastructure/file/prompt-loader';
 import { saveDiffByFiles, deleteTempDiffFiles, type FileDiff } from '../infrastructure/file/diff-file-manager';
 
@@ -20,15 +19,13 @@ export class PRReviewer {
    * @param diff PR差分
    * @param projectContext プロジェクトコンテキスト
    * @param reviewGuidelines レビュー観点
-   * @param existingConversations 既存Conversationの内容（重複指摘を避けるため）
-   * @param commentsForDb Duplicate Checker DB初期化用のコメントリスト
+   * @param existingCommentsPath 既存コメントのJSONファイルパス
    */
   async review(
     diff: string,
     projectContext: string,
     reviewGuidelines: string,
-    existingConversations: string,
-    commentsForDb: any[]
+    existingCommentsPath: string
   ): Promise<ReviewResult> {
     // 差分をファイル単位で分割して一時ファイルに保存
     const fileDiffs = saveDiffByFiles(diff);
@@ -38,22 +35,22 @@ export class PRReviewer {
 
     try {
       // プロンプトを生成（ファイル単位の差分リストを渡す）
-      const promptText = this.buildPrompt(fileDiffs, projectContext, reviewGuidelines, existingConversations, commentsForDb);
+      const promptText = this.buildPrompt(fileDiffs, projectContext, reviewGuidelines);
 
       console.log('🤖 Starting Claude code review with Agent SDK...');
 
-      // Review output MCP server (stdio - TypeScript)
+      // Review util MCP server (stdio - TypeScript)
       const reviewMcpServer = {
         type: 'stdio' as const,
         command: 'bun',
         args: [
           'run',
-          `${__dirname}/../mcp/review-output-server.ts`
-        ]
+          `${__dirname}/../mcp/review-util-mcp-server.ts`
+        ],
+        env: {
+          EXISTING_COMMENTS_PATH: existingCommentsPath
+        }
       };
-
-      // Duplicate checker MCP server (stdio - Python)
-      const duplicateCheckerServer = createDuplicateCheckerMcpServer();
 
       const claudeCodePath = getClaudeCodeExecutablePath();
       if (!claudeCodePath) {
@@ -66,15 +63,13 @@ export class PRReviewer {
         pathToClaudeCodeExecutable: claudeCodePath,
         maxTurns: 70,
         mcpServers: {
-          'review-output': reviewMcpServer,
-          'duplicate-checker': duplicateCheckerServer
+          'review-util': reviewMcpServer
         },
         allowedTools: [
           'Read',  // 差分ファイル読み込み用
-          'mcp__review-output__format_review',
-          'mcp__review-output__submit_review',
-          'mcp__duplicate-checker__check_duplicate_issue',
-          'mcp__duplicate-checker__initialize_comments_db'
+          'mcp__review-util__format_review',
+          'mcp__review-util__submit_review',
+          'mcp__review-util__get_comments_for_file'
         ],
         stderr: (data: string) => {
           stderrOutput += data;
@@ -100,14 +95,14 @@ export class PRReviewer {
               console.log(`[DEBUG] Tool input (full):`, JSON.stringify(toolUse.input, null, 2));
 
               // submit_review が呼ばれたら、引数を直接取得してレビュー結果として保存
-              if (toolUse.name === 'mcp__review-output__submit_review') {
+              if (toolUse.name === 'mcp__review-util__submit_review') {
                 this.reviewResult = toolUse.input;
                 console.log(`✅ [submit_review] Review result captured from tool input: ${toolUse.input.issues?.length || 0} issues`);
               }
 
-              // review-output系ツールの詳細な型情報
-              if (toolUse.name === 'mcp__review-output__format_review' || 
-                  toolUse.name === 'mcp__review-output__submit_review') {
+              // review-util系ツールの詳細な型情報
+              if (toolUse.name === 'mcp__review-util__format_review' ||
+                  toolUse.name === 'mcp__review-util__submit_review') {
                 console.log(`[DEBUG] issues type: ${typeof toolUse.input?.issues}`);
                 console.log(`[DEBUG] issues is array: ${Array.isArray(toolUse.input?.issues)}`);
                 console.log(`[DEBUG] stats type: ${typeof toolUse.input?.stats}`);
@@ -177,13 +172,9 @@ export class PRReviewer {
   private buildPrompt(
     fileDiffs: FileDiff[],
     projectContext: string,
-    reviewGuidelines: string,
-    existingConversations: string,
-    commentsForDb: any[]
+    reviewGuidelines: string
   ): string {
-    const commentsJson = JSON.stringify(commentsForDb, null, 2);
-
     // 外部プロンプトMDファイルから読み込み（差分はファイルリストで指定）
-    return loadReviewPrompt(fileDiffs, projectContext, reviewGuidelines, existingConversations, commentsJson);
+    return loadReviewPrompt(fileDiffs, projectContext, reviewGuidelines);
   }
 }

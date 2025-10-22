@@ -6,16 +6,18 @@
  */
 
 import type { Octokit } from 'octokit';
+import { unlink } from 'fs/promises';
 import { PRReviewer } from '../domain/reviewer';
-import { processPreviousConversations } from './comment-processor';
-import { collectExistingConversations, formatConversationsForPrompt } from '../domain/conversation-collector';
-import { collectCommentsForDuplicateChecker } from '../domain/duplicate-checker-initializer';
+import { CommentResolver } from '../domain/comment-resolver';
+import { collectExistingConversations } from '../domain/conversation-collector';
 import { readPRDiff } from '../infrastructure/file/diff-reader';
 import { readProjectContext } from '../infrastructure/file/context-reader';
 import { readReviewGuidelines } from '../infrastructure/file/guidelines-reader';
 import { GitHubClient } from '../infrastructure/github/github-client';
+import { ThreadResolver } from '../infrastructure/github/thread-resolver';
 import { postInlineComments, postReviewSummaryComment } from '../infrastructure/github/comment-poster';
 import { formatReviewAsMarkdown } from '../shared/formatter';
+import { saveDiffByFiles, deleteTempDiffFiles } from '../infrastructure/file/diff-file-manager';
 
 export class ReviewOrchestrator {
   constructor(
@@ -37,6 +39,8 @@ export class ReviewOrchestrator {
     console.log(`🔢 PR Number: ${this.prNumber}`);
     console.log('');
 
+    const commentsFilePath = `/tmp/review-comments-${this.prNumber}.json`;
+
     try {
       // ====== Phase 1: 前回のConversation処理 ======
 
@@ -49,31 +53,7 @@ export class ReviewOrchestrator {
       console.log('📖 Reading project context...');
       const context = readProjectContext();
 
-      // 3. 前回のConversationを処理（差分チェック → A/B/C/D判定）
-      await processPreviousConversations(
-        this.octokit,
-        this.githubClient,
-        this.owner,
-        this.repo,
-        this.prNumber,
-        this.prAuthor,
-        headSha,
-        context
-      );
-
-      // ====== Phase 2: 新規レビュー実施 ======
-
-      // 4. PR差分を読み込む
-      console.log('');
-      console.log('📖 Reading PR diff...');
-      const diff = readPRDiff();
-      console.log(`✅ Loaded ${diff.split('\n').length} lines of diff`);
-
-      // 5. レビュー観点を読み込む
-      console.log('📖 Reading review guidelines...');
-      const reviewGuidelines = readReviewGuidelines();
-
-      // 6. 既存Conversationを収集（重複指摘を避けるため）
+      // 3. 既存Conversationを収集（前回コメント取得 + threadIdマッピング）
       console.log('📋 Collecting existing conversations...');
       const existingConversations = await collectExistingConversations(
         this.octokit,
@@ -81,22 +61,59 @@ export class ReviewOrchestrator {
         this.repo,
         this.prNumber
       );
-      const existingConversationsText = formatConversationsForPrompt(existingConversations);
       console.log(`✅ Found ${existingConversations.length} existing conversations`);
 
-      // 6.5. Duplicate Checker DBを初期化
-      console.log('📋 Initializing duplicate checker database...');
-      const commentsForDb = await collectCommentsForDuplicateChecker(
-        this.octokit,
-        this.owner,
-        this.repo,
-        this.prNumber
-      );
-      console.log(`✅ Collected ${commentsForDb.length} comments for duplicate checker`);
+      // 4. ThreadResolverでthreadIdマッピング作成
+      console.log('🔍 Building thread ID mapping...');
+      const threadResolver = new ThreadResolver(this.octokit);
+      const threadMap = await threadResolver.buildThreadMap(this.owner, this.repo, this.prNumber);
+      console.log(`✅ Built thread map: ${threadMap.size} comments mapped`);
 
-      // TODO: MCPツールでDB初期化を呼び出す（Phase 3-2で実装）
+      // 5. 既存コメントにthreadIdを追加
+      const commentsWithThreadIds = existingConversations.map(comment => ({
+        ...comment,
+        thread_id: threadMap.get(comment.comment_id) || null
+      }));
 
-      // 7. レビュー実施
+      // 6. 既存コメントをJSONファイルに保存
+      await Bun.write(commentsFilePath, JSON.stringify(commentsWithThreadIds, null, 2));
+      console.log(`✅ Saved ${commentsWithThreadIds.length} comments to ${commentsFilePath}`);
+
+      // 7. PR差分を読み込んでファイル単位で分割保存
+      console.log('📖 Reading PR diff...');
+      const diff = readPRDiff();
+      const diffFiles = saveDiffByFiles(diff);
+      console.log(`✅ Saved ${diffFiles.length} diff files`);
+
+      // 8. 前回コメントを解決（Claude Agent SDKで判定）
+      if (commentsWithThreadIds.length > 0) {
+        console.log('');
+        console.log('🔄 Resolving previous comments...');
+        const commentResolver = new CommentResolver();
+        await commentResolver.resolvePreviousComments(
+          commentsWithThreadIds,
+          context,
+          commentsFilePath,
+          diffFiles,
+          this.owner,
+          this.repo,
+          this.prNumber,
+          this.prAuthor
+        );
+      } else {
+        console.log('✅ No previous comments to resolve');
+      }
+
+      // 9. 差分一時ファイルをクリーンアップ
+      deleteTempDiffFiles(diffFiles);
+
+      // ====== Phase 2: 新規レビュー実施 ======
+
+      console.log('');
+      console.log('📖 Reading review guidelines...');
+      const reviewGuidelines = readReviewGuidelines();
+
+      // 10. レビュー実施
       console.log('');
       console.log('🤖 Starting code review...');
       const reviewer = new PRReviewer();
@@ -104,16 +121,15 @@ export class ReviewOrchestrator {
         diff,
         context,
         reviewGuidelines,
-        existingConversationsText,
-        commentsForDb
+        commentsFilePath
       );
       console.log(`✅ Review completed: ${reviewResult.stats.total_issues} issues found`);
 
-      // 8. ファイル差分への行コメント投稿
+      // 11. ファイル差分への行コメント投稿
       console.log('');
       await postInlineComments(this.githubClient, reviewResult, headSha, this.prNumber);
 
-      // 9. GitHubに統計サマリーコメント投稿
+      // 12. GitHubに統計サマリーコメント投稿
       console.log('');
       console.log('💬 Posting summary comment to GitHub...');
       const reviewMarkdown = formatReviewAsMarkdown(reviewResult);
@@ -125,6 +141,14 @@ export class ReviewOrchestrator {
       // 重大な問題がある場合も警告のみ（ワークフローは成功させる）
       if (reviewResult.stats.critical > 0) {
         console.log('⚠️ Critical issues found (see PR comment for details)');
+      }
+
+      // 一時ファイルのクリーンアップ
+      try {
+        await unlink(commentsFilePath);
+        console.log(`🗑️  Cleaned up temporary file: ${commentsFilePath}`);
+      } catch (cleanupError) {
+        console.warn(`⚠️  Failed to cleanup temporary file: ${commentsFilePath}`);
       }
 
     } catch (error) {
@@ -151,6 +175,14 @@ export class ReviewOrchestrator {
         } else {
           console.error(`   Error:`, commentError);
         }
+      }
+
+      // エラー時も一時ファイルのクリーンアップ
+      try {
+        await unlink(commentsFilePath);
+        console.log(`🗑️  Cleaned up temporary file: ${commentsFilePath}`);
+      } catch (cleanupError) {
+        console.warn(`⚠️  Failed to cleanup temporary file: ${commentsFilePath}`);
       }
 
       throw error;

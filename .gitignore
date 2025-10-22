@@ -32,6 +32,8 @@ __pycache__/
 *.pyd
 mcp/__pycache__/
 mcp/.venv/
+tools/pr-review/mcp/__pycache__/
+tools/pr-review/mcp/.venv/
 
 # Serena MCP cache
 .serena/
@@ -58,10 +60,14 @@ mcp/.venv/
 # Built CSS (Tailwind)
 src/templates/styles.built.css
 
-# PR Review temporary files and databases
-tools/pr-review/mcp/.pr-review-comments.db
+# PR Review temporary files
 tools/pr-review/mcp/log.md
 pr-diff.txt
 
-# Private development documentation
-docs/
+# Private development documentation (exclude all, then include specific files)
+docs/*
+!docs/MCP_SERVER_GUIDELINES.md
+!docs/DEVELOPMENT.md
+!docs/AGENTS.md
+!docs/NOTARIZATION.md
+!docs/RELEASE_PROCESS.md
