@@ -7,17 +7,11 @@
 
 import type { Octokit } from 'octokit';
 import { unlink } from 'fs/promises';
-import { PRReviewer } from '../domain/reviewer';
-import { CommentResolver } from '../domain/comment-resolver';
-import { collectExistingConversations } from '../domain/conversation-collector';
-import { readPRDiff } from '../infrastructure/file/diff-reader';
-import { readProjectContext } from '../infrastructure/file/context-reader';
-import { readReviewGuidelines } from '../infrastructure/file/guidelines-reader';
-import { GitHubClient } from '../infrastructure/github/github-client';
-import { ThreadResolver } from '../infrastructure/github/thread-resolver';
-import { postInlineComments, postReviewSummaryComment } from '../infrastructure/github/comment-poster';
-import { formatReviewAsMarkdown } from '../shared/formatter';
-import { saveDiffByFiles, deleteTempDiffFiles } from '../infrastructure/file/diff-file-manager';
+import { PRReviewer } from './reviewer';
+import { CommentResolver } from './comment-resolver';
+import { collectExistingConversations } from '../lib/parsers';
+import { readPRDiff, readProjectContext, readReviewGuidelines, saveDiffByFiles, deleteTempDiffFiles } from '../lib/files';
+import { GitHubClient, ThreadResolver } from '../lib/github';
 
 export class ReviewOrchestrator {
   constructor(
@@ -113,35 +107,24 @@ export class ReviewOrchestrator {
       console.log('📖 Reading review guidelines...');
       const reviewGuidelines = readReviewGuidelines();
 
-      // 10. レビュー実施
+      // 10. レビュー実施（submit_review内でGitHub投稿）
       console.log('');
       console.log('🤖 Starting code review...');
-      const reviewer = new PRReviewer();
-      const reviewResult = await reviewer.review(
+      const reviewer = new PRReviewer(
+        commentsFilePath,
+        headSha,
+        this.owner,
+        this.repo,
+        this.prNumber
+      );
+      await reviewer.review(
         diff,
         context,
-        reviewGuidelines,
-        commentsFilePath
+        reviewGuidelines
       );
-      console.log(`✅ Review completed: ${reviewResult.stats.total_issues} issues found`);
-
-      // 11. ファイル差分への行コメント投稿
-      console.log('');
-      await postInlineComments(this.githubClient, reviewResult, headSha, this.prNumber);
-
-      // 12. GitHubに統計サマリーコメント投稿
-      console.log('');
-      console.log('💬 Posting summary comment to GitHub...');
-      const reviewMarkdown = formatReviewAsMarkdown(reviewResult);
-      await postReviewSummaryComment(this.githubClient, this.prNumber, reviewMarkdown);
 
       console.log('');
       console.log('✅ Review process completed successfully!');
-
-      // 重大な問題がある場合も警告のみ（ワークフローは成功させる）
-      if (reviewResult.stats.critical > 0) {
-        console.log('⚠️ Critical issues found (see PR comment for details)');
-      }
 
       // 一時ファイルのクリーンアップ
       try {

@@ -19,8 +19,7 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { existsSync } from 'fs';
 import { Octokit } from 'octokit';
-import { GitHubClient } from '../infrastructure/github/github-client';
-import { ThreadResolver } from '../infrastructure/github/thread-resolver';
+import { GitHubClient, ThreadResolver } from '../lib/github';
 import { BOT_SIGNATURE } from '../shared/constants';
 
 // Import schemas from shared
@@ -35,6 +34,9 @@ let githubClient: GitHubClient | null = null;
 let threadResolver: ThreadResolver | null = null;
 let prNumber: number = 0;
 let prAuthor: string = '';
+let headSha: string = '';
+let owner: string = '';
+let repo: string = '';
 
 // Input schemas
 const FormatReviewInputSchema = z.object({
@@ -85,10 +87,11 @@ async function initializeComments() {
  */
 function initializeGitHubClients() {
   const token = process.env.GITHUB_TOKEN;
-  const owner = process.env.GITHUB_OWNER;
-  const repo = process.env.GITHUB_REPO;
+  owner = process.env.GITHUB_OWNER || '';
+  repo = process.env.GITHUB_REPO || '';
   const prNumberStr = process.env.PR_NUMBER;
   prAuthor = process.env.PR_AUTHOR || '';
+  headSha = process.env.HEAD_SHA || '';
 
   if (!token || !owner || !repo || !prNumberStr) {
     console.error('[MCP] Missing required environment variables for GitHub API');
@@ -232,15 +235,71 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       low: input.issues.filter(i => i.severity === 'low').length
     };
 
-    // Return success message
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `✅ Review result submitted successfully.\n\nTotal issues: ${actualStats.total_issues}\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}`
-        }
-      ]
-    };
+    // GitHub clients check
+    if (!githubClient || !octokit) {
+      console.error('[MCP] GitHub clients not initialized, skipping GitHub posting');
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⚠️ Review result validated but not posted to GitHub (clients not initialized).\n\nTotal issues: ${actualStats.total_issues}\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}`
+          }
+        ]
+      };
+    }
+
+    if (!headSha) {
+      console.error('[MCP] HEAD_SHA not provided, skipping GitHub posting');
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⚠️ Review result validated but not posted to GitHub (HEAD_SHA missing).\n\nTotal issues: ${actualStats.total_issues}`
+          }
+        ]
+      };
+    }
+
+    try {
+      // GitHub comment posting
+      const reviewResult = {
+        issues: input.issues,
+        summary: input.summary,
+        stats: input.stats
+      };
+
+      // 1. Post inline comments
+      console.error('[MCP] Posting inline comments to GitHub...');
+      const { postInlineComments } = await import('../lib/github.js');
+      await postInlineComments(githubClient, reviewResult, headSha, prNumber);
+
+      // 2. Post summary comment
+      console.error('[MCP] Posting summary comment to GitHub...');
+      const { postReviewSummaryComment } = await import('../lib/github.js');
+      const { formatReviewAsMarkdown } = await import('../shared/formatter.js');
+      const reviewMarkdown = formatReviewAsMarkdown(reviewResult);
+      await postReviewSummaryComment(githubClient, prNumber, reviewMarkdown);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✅ Review submitted and posted to GitHub successfully.\n\nTotal issues: ${actualStats.total_issues}\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}`
+          }
+        ]
+      };
+    } catch (error) {
+      console.error('[MCP] Failed to post review to GitHub:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Failed to post review to GitHub: ${error instanceof Error ? error.message : String(error)}\n\nReview was validated but not posted.`
+          }
+        ],
+        isError: true
+      };
+    }
   }
 
   if (name === 'get_comments_for_file') {

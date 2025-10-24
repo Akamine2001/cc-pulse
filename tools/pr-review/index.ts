@@ -8,8 +8,8 @@
 
 import { Octokit } from 'octokit';
 import { validateEnv } from './shared/env';
-import { GitHubClient } from './infrastructure/github/github-client';
-import { ReviewOrchestrator } from './application/review-orchestrator';
+import { GitHubClient } from './lib/github';
+import { ReviewOrchestrator } from './core/orchestrator';
 
 /**
  * メイン処理

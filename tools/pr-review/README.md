@@ -16,42 +16,37 @@ cc-pulse用のGitHub Actions自動PRレビューツール（Phase 2.0）
 
 ## アーキテクチャ
 
-3層アーキテクチャで構成:
+機能ベースのシンプルな構造で構成:
 
 ```
 tools/pr-review/
 ├── index.ts                          # エントリーポイント
 ├── review-guidelines.md              # レビュー観点（編集可能）
 │
-├── application/                      # アプリケーション層
-│   ├── review-orchestrator.ts        # メインフロー制御
-│   └── comment-processor.ts          # Conversation処理
+├── core/                             # コア処理
+│   ├── orchestrator.ts               # メインフロー制御
+│   ├── reviewer.ts                   # レビュー実行（ClaudeAgent使用）
+│   └── comment-resolver.ts           # コメント解決（ClaudeAgent使用）
 │
-├── domain/                           # ドメイン層
-│   ├── reviewer.ts                   # レビュー実行
-│   ├── conversation-diff-analyzer.ts # 差分分析（A/B/C判定）
-│   └── conversation-collector.ts     # Conversation収集
+├── lib/                              # 補助機能
+│   ├── claude.ts                     # Claude Agent SDK wrapper
+│   ├── github.ts                     # GitHub API統合
+│   ├── files.ts                      # ファイルI/O統合
+│   └── parsers.ts                    # パース処理
 │
-├── infrastructure/                   # インフラ層
-│   ├── github/                       # GitHub API操作
-│   │   ├── github-client.ts
-│   │   ├── thread-resolver.ts
-│   │   └── comment-poster.ts
-│   ├── mcp/                          # MCPサーバー管理
-│   │   └── mcp-server-factory.ts
-│   └── file/                         # ファイルI/O
-│       ├── diff-reader.ts
-│       ├── context-reader.ts
-│       └── guidelines-reader.ts
+├── mcp/                              # MCPサーバー
+│   └── review-util-mcp-server.ts
 │
-├── shared/                           # 共通機能
-│   ├── schemas.ts
-│   ├── env.ts
-│   ├── formatter.ts
-│   └── diff-parser.ts
+├── prompts/                          # プロンプトテンプレート
+│   ├── review-prompt.md
+│   └── resolve-comment-prompt.md
 │
-└── types/                            # 型定義
-    └── index.ts
+└── shared/                           # 共通定義
+    ├── types.ts                      # 型定義
+    ├── schemas.ts                    # Zodスキーマ
+    ├── constants.ts
+    ├── env.ts
+    └── formatter.ts
 ```
 
 ## 使用方法

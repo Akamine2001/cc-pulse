@@ -1,7 +1,7 @@
 /**
- * PR Review Tool - Type Definitions
+ * Type Definitions
  *
- * 型定義のエクスポート（shared/schemas.tsから型のみを再エクスポート）
+ * 型定義を集約（schemas.tsからの再エクスポート + 追加の型定義）
  */
 
 export type {
@@ -10,8 +10,9 @@ export type {
   ReviewStats,
   ReviewResult,
   ResolutionStatus,
-  IssueResolution
-} from '../shared/schemas';
+  IssueResolution,
+  ReviewComment
+} from './schemas';
 
 /**
  * GitHub関連の型定義
