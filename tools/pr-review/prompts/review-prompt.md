@@ -17,12 +17,9 @@ Read(file_path="/tmp/pr-review/xxx-0-src_cli.ts.diff")
 Read(file_path="/tmp/pr-review/xxx-1-src_utils_helper.ts.diff")
 ```
 
-差分を読み込んだら、以下のプロジェクトコンテキストとレビュー観点に従ってレビューしてください。
+差分を読み込んだら、以下のレビュー観点に従ってレビューしてください。
 
 # STEP 2: コードレビュー実施
-
-## プロジェクトコンテキスト
-{{PROJECT_CONTEXT}}
 
 ## レビュー観点
 {{REVIEW_GUIDELINES}}

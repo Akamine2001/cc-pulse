@@ -3,20 +3,5 @@
     "allow": [
       "Read"
     ]
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash scripts/serena-sync.sh",
-            "run_in_background": true,
-            "timeout": 300
-          }
-        ]
-      }
-    ]
   }
 }

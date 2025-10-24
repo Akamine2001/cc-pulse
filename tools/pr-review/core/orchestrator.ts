@@ -10,7 +10,7 @@ import { unlink } from 'fs/promises';
 import { PRReviewer } from './reviewer';
 import { CommentResolver } from './comment-resolver';
 import { collectExistingConversations } from '../lib/parsers';
-import { readPRDiff, readProjectContext, readReviewGuidelines, saveDiffByFiles, deleteTempDiffFiles } from '../lib/files';
+import { readPRDiff, readReviewGuidelines, saveDiffByFiles, deleteTempDiffFiles } from '../lib/files';
 import { GitHubClient, ThreadResolver } from '../lib/github';
 
 export class ReviewOrchestrator {
@@ -43,11 +43,7 @@ export class ReviewOrchestrator {
       const headSha = await this.githubClient.getLatestCommitSha(this.prNumber);
       console.log(`✅ Head SHA: ${headSha.substring(0, 7)}`);
 
-      // 2. プロジェクトコンテキストを読み込む
-      console.log('📖 Reading project context...');
-      const context = readProjectContext();
-
-      // 3. 既存Conversationを収集（前回コメント取得 + threadIdマッピング）
+      // 2. 既存Conversationを収集（前回コメント取得 + threadIdマッピング）
       console.log('📋 Collecting existing conversations...');
       const existingConversations = await collectExistingConversations(
         this.octokit,
@@ -86,7 +82,6 @@ export class ReviewOrchestrator {
         const commentResolver = new CommentResolver();
         await commentResolver.resolvePreviousComments(
           commentsWithThreadIds,
-          context,
           commentsFilePath,
           diffFiles,
           this.owner,
@@ -119,7 +114,6 @@ export class ReviewOrchestrator {
       );
       await reviewer.review(
         diff,
-        context,
         reviewGuidelines
       );
 

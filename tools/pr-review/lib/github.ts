@@ -305,7 +305,7 @@ export async function postReviewSummaryComment(
 ${reviewMarkdown}
 
 ---
-_このレビューはClaude Agent SDK${existsSync('.serena/memories/project_overview.md') ? 'とSerenaプロジェクトコンテキスト' : ''}を使用して生成されました_`;
+_このレビューはClaude Agent SDKを使用して生成されました_`;
 
   try {
     await githubClient.postComment(prNumber, body);

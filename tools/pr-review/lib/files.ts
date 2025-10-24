@@ -32,28 +32,6 @@ export function readPRDiff(diffPath: string = 'pr-diff.txt'): string {
 }
 
 // ============================================================================
-// Context Reader
-// ============================================================================
-
-/**
- * プロジェクトコンテキストを読み込む（.serenaディレクトリから）
- *
- * @param contextPath Serenaコンテキストのパス（デフォルト: .serena/memories/project_overview.md）
- * @returns プロジェクトコンテキストの内容
- */
-export function readProjectContext(
-  contextPath: string = '.serena/memories/project_overview.md'
-): string {
-  if (existsSync(contextPath)) {
-    console.log('✅ Found Serena project context');
-    return readFileSync(contextPath, 'utf-8');
-  }
-
-  console.log('⚠️ No Serena context found, using basic project info');
-  return 'No additional project context available.';
-}
-
-// ============================================================================
 // Guidelines Reader
 // ============================================================================
 
@@ -112,13 +90,11 @@ export interface FileDiff {
  * レビュープロンプトを読み込んで展開
  *
  * @param fileDiffs ファイル単位の差分情報の配列
- * @param projectContext プロジェクトコンテキスト
  * @param reviewGuidelines レビュー観点
  * @returns 展開済みプロンプト
  */
 export function loadReviewPrompt(
   fileDiffs: FileDiff[],
-  projectContext: string,
   reviewGuidelines: string
 ): string {
   const promptPath = join(__dirname, '../prompts/review-prompt.md');
@@ -141,7 +117,6 @@ export function loadReviewPrompt(
 
   return template
     .replace('{{DIFF_FILES_LIST}}', diffFilesList)
-    .replace('{{PROJECT_CONTEXT}}', projectContext)
     .replace('{{REVIEW_GUIDELINES}}', reviewGuidelines);
 }
 
@@ -149,12 +124,10 @@ export function loadReviewPrompt(
  * 前回コメント解決プロンプトを読み込んで展開
  *
  * @param fileDiffs ファイル単位の差分情報の配列
- * @param context プロジェクトコンテキスト
  * @returns 展開済みプロンプト
  */
 export function loadResolveCommentPrompt(
-  fileDiffs: FileDiff[],
-  context: string
+  fileDiffs: FileDiff[]
 ): string {
   const promptPath = join(__dirname, '../prompts/resolve-comment-prompt.md');
 
@@ -175,8 +148,7 @@ export function loadResolveCommentPrompt(
   }).join('\n\n');
 
   return template
-    .replace('{{DIFF_FILES_LIST}}', diffFilesList)
-    .replace('{{CONTEXT}}', context);
+    .replace('{{DIFF_FILES_LIST}}', diffFilesList);
 }
 
 // ============================================================================

@@ -16,6 +16,7 @@ macOS向け自動ニュース収集CLIツール。Claude Agent SDKを統合し�
 - **ランタイム**: Bun v1.2.0+
 - **言語**: TypeScript 5+
 - **AI**: Claude Agent SDK (@anthropic-ai/claude-agent-sdk)
+- **コードベース解析**: Serena MCP (LSPベースのセマンティック解析)
 - **WebUI**: React 19 + Tailwind CSS
 - **データベース**: SQLite (bun:sqlite)
 - **Python環境**: uv (MCPサーバー管理用)
@@ -47,6 +48,20 @@ macOS向け自動ニュース収集CLIツール。Claude Agent SDKを統合し�
 - 共通ロジックは `src/utils/` へ
 
 ## PRレビュー基準
+
+### AIによるコードレビュー
+
+このプロジェクトではClaude Agent SDKとSerena MCPを使用した自動コードレビューを実施しています。
+
+**Serena MCPの活用**:
+- **セマンティックコード解析**: LSP（Language Server Protocol）ベースでコードを構造的に理解
+- **ファイル読み込み**: `mcp__serena__read_file` でプロジェクトファイルを正確に読み込み
+- **シンボル検索**: `mcp__serena__find_symbol` で関数・クラス定義を特定
+- **参照解析**: `mcp__serena__find_referencing_symbols` で影響範囲を追跡
+- **コード編集**: `mcp__serena__replace_symbol_body` などで必要に応じて修正提案
+- **パターン検索**: `mcp__serena__search_for_pattern` で類似コードを発見
+
+Serenaのツールを活用することで、単なるテキストベースの差分解析を超えた、深いコードベース理解に基づくレビューが可能です。
 
 ### 必須チェック項目
 
@@ -167,6 +182,7 @@ cc-pulse/
 #### 4. MCP Servers
 - **embedding-mcp-server**: Sentence Transformersによるベクトル検索
 - **output-tools-server**: ファイル出力・データベース保存
+- **serena-mcp-server**: LSPベースのセマンティックコード解析（GitHub Actions PRレビュー用）
 
 ### データフロー
 
@@ -348,3 +364,4 @@ launchctl list | grep cc-pulse
 - [Bun Documentation](https://bun.sh/docs)
 - [Claude Agent SDK](https://github.com/anthropics/anthropic-sdk-typescript/tree/main/packages/claude-agent-sdk)
 - [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
+- [Serena MCP Server](https://github.com/oraios/serena)
