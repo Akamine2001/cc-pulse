@@ -35,13 +35,21 @@ interface DailyNewsData {
   errors: Array<{ message: string; timestamp: string }>;
 }
 
+// Error detail type
+interface ErrorDetail {
+  type: 'network' | 'api';
+  message: string;
+  timestamp: string;
+  action: string;
+}
+
 // Main App Component
 function App() {
   const [datetimes, setDatetimes] = useState<string[]>([]);
   const [selectedDatetime, setSelectedDatetime] = useState<string | null>(null);
   const [newsData, setNewsData] = useState<DailyNewsData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorDetail | null>(null);
 
   // Fetch available datetimes on mount
   useEffect(() => {
@@ -52,6 +60,22 @@ function App() {
   const fetchDatetimes = async () => {
     try {
       const response = await fetch('/api/dates');
+      if (!response.ok) {
+        // APIエラー（サーバーからエラーレスポンス）
+        setError({
+          type: 'api',
+          message: '収集日時リストの取得に失敗しました',
+          timestamp: new Date().toLocaleString('ja-JP', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          action: 'ページを再読み込みしてください'
+        });
+        return;
+      }
       const data = await response.json() as { dates?: string[] };
       setDatetimes(data.dates || []);
 
@@ -60,7 +84,19 @@ function App() {
         setSelectedDatetime(data.dates[0]);
       }
     } catch (err) {
-      setError('Failed to fetch datetime list');
+      // ネットワークエラー（fetch自体が失敗）
+      setError({
+        type: 'network',
+        message: '収集日時リストの取得に失敗しました',
+        timestamp: new Date().toLocaleString('ja-JP', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        action: 'ネットワーク接続を確認してから、ページを再読み込みしてください'
+      });
       console.error(err);
     }
   };
@@ -76,12 +112,38 @@ function App() {
       try {
         const response = await fetch(`/api/news/${selectedDatetime}`);
         if (!response.ok) {
-          throw new Error('Failed to fetch news data');
+          // APIエラー（サーバーからエラーレスポンス）
+          setError({
+            type: 'api',
+            message: 'ニュースデータの取得に失敗しました',
+            timestamp: new Date().toLocaleString('ja-JP', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+            action: '別の収集日時を選択するか、ページを再読み込みしてください'
+          });
+          setLoading(false);
+          return;
         }
         const data = await response.json() as DailyNewsData;
         setNewsData(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        // ネットワークエラー（fetch自体が失敗）
+        setError({
+          type: 'network',
+          message: 'ニュースデータの取得に失敗しました',
+          timestamp: new Date().toLocaleString('ja-JP', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          action: 'ネットワーク接続を確認してから、ページを再読み込みしてください'
+        });
         console.error(err);
       } finally {
         setLoading(false);
@@ -161,7 +223,26 @@ function App() {
         {/* Error */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
-            <p className="text-red-800">{error}</p>
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <span className="text-2xl">{error.type === 'network' ? '🌐' : '⚠️'}</span>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-red-800">
+                  {error.type === 'network' ? 'ネットワークエラー' : 'APIエラー'}
+                </h3>
+                <div className="mt-2 text-sm text-red-700">
+                  <p>{error.message}</p>
+                </div>
+                <div className="mt-2 text-xs text-red-600">
+                  <p>発生時刻: {error.timestamp}</p>
+                </div>
+                <div className="mt-3 text-sm">
+                  <p className="font-medium text-red-800">推奨アクション:</p>
+                  <p className="text-red-700">{error.action}</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
