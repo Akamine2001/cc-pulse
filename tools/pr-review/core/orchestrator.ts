@@ -13,6 +13,7 @@ import { collectExistingConversations } from '../lib/parsers';
 import { readPRDiff, readReviewGuidelines, saveDiffByFiles, deleteTempDiffFiles } from '../lib/files';
 import { PRClient } from '../../shared/github/pr-client';
 import { ThreadResolver } from '../../shared/github/thread-resolver';
+import { GuidelinesExtractor } from '../../shared/github/guidelines-extractor';
 
 export class ReviewOrchestrator {
   constructor(
@@ -37,8 +38,20 @@ export class ReviewOrchestrator {
     const commentsFilePath = `/tmp/review-comments-${this.prNumber}.json`;
 
     try {
+      // ====== Phase 0: レビュー観点の動的取得 ======
+
+      console.log('');
+      const guidelinesExtractor = new GuidelinesExtractor(
+        this.octokit,
+        this.owner,
+        this.repo
+      );
+
+      const dynamicGuidelines = await guidelinesExtractor.extractFromPR(this.prNumber);
+
       // ====== Phase 1: 前回のConversation処理 ======
 
+      console.log('');
       // 1. 最新のコミットSHAを取得
       console.log('🔍 Getting latest commit SHA...');
       const headSha = await this.githubClient.getLatestCommitSha(this.prNumber);
@@ -124,7 +137,13 @@ export class ReviewOrchestrator {
 
       console.log('');
       console.log('📖 Reading review guidelines...');
-      const reviewGuidelines = readReviewGuidelines();
+      const reviewGuidelines = readReviewGuidelines(dynamicGuidelines);
+
+      // ローカルモードの場合、レビュー観点をファイルに保存
+      const isLocalMode = process.env.LOCAL_MODE === 'true';
+      if (isLocalMode) {
+        await this.saveGuidelinesLocally(reviewGuidelines);
+      }
 
       // 10. レビュー実施（submit_review内でGitHub投稿）
       console.log('');
@@ -190,6 +209,31 @@ export class ReviewOrchestrator {
       }
 
       throw error;
+    }
+  }
+
+  /**
+   * ローカルモード: レビュー観点をファイルに保存
+   */
+  private async saveGuidelinesLocally(guidelines: string): Promise<void> {
+    try {
+      const { dirname, join } = await import('path');
+      const { mkdir } = await import('fs/promises');
+      const { fileURLToPath } = await import('url');
+
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      const outputDir = join(__dirname, '../output');
+      const outputPath = join(outputDir, `pr-${this.prNumber}-guidelines.md`);
+
+      await mkdir(outputDir, { recursive: true });
+
+      const content = `# PR #${this.prNumber} レビュー観点\n\n${guidelines}`;
+      await Bun.write(outputPath, content);
+
+      console.log(`📝 Review guidelines saved to: ${outputPath}`);
+    } catch (error) {
+      console.warn('⚠️  Failed to save guidelines to file:', error);
     }
   }
 }

@@ -87,7 +87,9 @@ export LOCAL_MODE=true  # ローカルモード: mdファイルに保存
 # Run review
 echo -e "${YELLOW}🤖 Starting PR review (Local Mode)...${NC}"
 echo -e "${YELLOW}   (This may take several minutes)${NC}"
-echo -e "${YELLOW}   Review will be saved to tools/pr-review/output/${NC}"
+echo -e "${YELLOW}   Results will be saved to tools/pr-review/output/${NC}"
+echo -e "${YELLOW}   - Review guidelines: pr-${PR_NUMBER}-guidelines.md${NC}"
+echo -e "${YELLOW}   - Review result: pr-${PR_NUMBER}-review.md${NC}"
 echo ""
 
 # Execute review and output to both terminal and log.md (in mcp directory)
@@ -103,7 +105,10 @@ rm -f pr-diff.txt
 echo ""
 if [ $EXIT_CODE -eq 0 ]; then
   echo -e "${GREEN}✅ Review completed successfully!${NC}"
-  echo -e "  Log saved to: $LOG_FILE"
+  echo -e "  📝 Output files:"
+  echo -e "     - Guidelines: tools/pr-review/output/pr-${PR_NUMBER}-guidelines.md"
+  echo -e "     - Review: tools/pr-review/output/pr-${PR_NUMBER}-review.md"
+  echo -e "     - Log: $LOG_FILE"
 else
   echo -e "${RED}❌ Review failed with exit code: ${EXIT_CODE}${NC}"
   echo -e "  Check $LOG_FILE for details"

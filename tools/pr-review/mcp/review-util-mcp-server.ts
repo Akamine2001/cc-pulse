@@ -95,6 +95,11 @@ function initializeGitHubClients() {
   headSha = process.env.HEAD_SHA || '';
   const isLocalMode = process.env.LOCAL_MODE === 'true';
 
+  // prNumberは必ず設定（ローカルモードでも使用する）
+  if (prNumberStr) {
+    prNumber = parseInt(prNumberStr, 10);
+  }
+
   if (isLocalMode) {
     console.error('[MCP] Running in LOCAL_MODE - GitHub posting disabled');
     return;
@@ -104,8 +109,6 @@ function initializeGitHubClients() {
     console.error('[MCP] Missing required environment variables for GitHub API');
     return;
   }
-
-  prNumber = parseInt(prNumberStr, 10);
   octokit = new Octokit({ auth: token });
   prClient = new PRClient(octokit, owner, repo);
   threadResolver = new ThreadResolver(octokit);
@@ -242,37 +245,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       low: input.issues.filter(i => i.severity === 'low').length
     };
 
-    // GitHub clients check
-    if (!prClient || !octokit) {
-      console.error('[MCP] GitHub clients not initialized, skipping GitHub posting');
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `⚠️ Review result validated but not posted to GitHub (clients not initialized).\n\nTotal issues: ${actualStats.total_issues}\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}`
-          }
-        ]
-      };
-    }
-
-    if (!headSha) {
-      console.error('[MCP] HEAD_SHA not provided, skipping GitHub posting');
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `⚠️ Review result validated but not posted to GitHub (HEAD_SHA missing).\n\nTotal issues: ${actualStats.total_issues}`
-          }
-        ]
-      };
-    }
-
     const reviewResult = {
       issues: input.issues,
       summary: input.summary,
       stats: input.stats
     };
 
+    // ローカルモードのチェックを最優先（GitHubクライアント不要）
     const isLocalMode = process.env.LOCAL_MODE === 'true';
 
     if (isLocalMode) {
@@ -323,7 +302,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = dirname(__filename);
-        const outputDir = join(__dirname, '../../output');
+        const outputDir = join(__dirname, '../output');
         const outputPath = join(outputDir, `pr-${prNumber}-review.md`);
 
         await mkdir(outputDir, { recursive: true });
@@ -354,6 +333,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     // 通常モード: GitHubに投稿
+    // GitHub clients check
+    if (!prClient || !octokit) {
+      console.error('[MCP] GitHub clients not initialized, skipping GitHub posting');
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⚠️ Review result validated but not posted to GitHub (clients not initialized).\n\nTotal issues: ${actualStats.total_issues}\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}`
+          }
+        ]
+      };
+    }
+
+    if (!headSha) {
+      console.error('[MCP] HEAD_SHA not provided, skipping GitHub posting');
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⚠️ Review result validated but not posted to GitHub (HEAD_SHA missing).\n\nTotal issues: ${actualStats.total_issues}`
+          }
+        ]
+      };
+    }
     try {
       // 1. Post inline comments
       console.error('[MCP] Posting inline comments to GitHub...');

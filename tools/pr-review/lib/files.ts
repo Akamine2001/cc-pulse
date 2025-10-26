@@ -36,36 +36,50 @@ export function readPRDiff(diffPath: string = 'pr-diff.txt'): string {
 // ============================================================================
 
 /**
- * review-guidelines.mdを読み込む
+ * レビュー観点を読み込む
  *
+ * 構成:
+ * - 基底観点（base-review-guidelines.md）を常に含める
+ * - 動的観点（サブIssueから取得）または静的観点（review-guidelines.md）を追加
+ *
+ * @param dynamicGuidelines 動的に取得したレビュー観点（オプション）
  * @returns レビュー観点の内容
  */
-export function readReviewGuidelines(): string {
-  // tools/pr-review/review-guidelines.md のパスを解決
+export function readReviewGuidelines(dynamicGuidelines?: string | null): string {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const guidelinesPath = join(currentDir, '../review-guidelines.md');
 
-  if (!existsSync(guidelinesPath)) {
-    console.warn('⚠️ review-guidelines.md not found, using default guidelines');
-    return getDefaultGuidelines();
+  // 1. 基底観点を読み込み（常に含める）
+  const baseGuidelinesPath = join(currentDir, '../base-review-guidelines.md');
+  if (!existsSync(baseGuidelinesPath)) {
+    throw new Error(
+      `base-review-guidelines.md not found at ${baseGuidelinesPath}.\n` +
+        'This file is required for all PR reviews.'
+    );
+  }
+  const baseGuidelines = readFileSync(baseGuidelinesPath, 'utf-8');
+
+  // 2. 動的観点または静的観点を追加
+  let additionalGuidelines: string;
+
+  if (dynamicGuidelines) {
+    // 動的観点が取得できた場合
+    console.log('✅ Using base + dynamic review guidelines from related issue');
+    additionalGuidelines = dynamicGuidelines;
+  } else {
+    // 静的ファイルから読み込み
+    const guidelinesPath = join(currentDir, '../review-guidelines.md');
+    if (!existsSync(guidelinesPath)) {
+      throw new Error(
+        `review-guidelines.md not found at ${guidelinesPath}.\n` +
+          'Please create this file or ensure a related issue with review guidelines exists.'
+      );
+    }
+    console.log('✅ Using base + static review guidelines from review-guidelines.md');
+    additionalGuidelines = readFileSync(guidelinesPath, 'utf-8');
   }
 
-  console.log('✅ Loaded review guidelines from review-guidelines.md');
-  return readFileSync(guidelinesPath, 'utf-8');
-}
-
-/**
- * デフォルトのレビュー観点（ファイルが見つからない場合）
- */
-function getDefaultGuidelines(): string {
-  return `# デフォルトレビュー観点
-
-1. **デグレーション**: 既存機能への悪影響
-2. **パフォーマンス**: 実行速度やメモリ使用量への影響
-3. **セキュリティ**: API KEY漏洩、インジェクション脆弱性など
-4. **コーディング規約**: CLAUDE.mdの規約遵守
-5. **型安全性**: TypeScriptの型定義の適切性
-`;
+  // 3. 基底観点 + 追加観点を結合
+  return `${baseGuidelines}\n\n---\n\n${additionalGuidelines}`;
 }
 
 // ============================================================================
