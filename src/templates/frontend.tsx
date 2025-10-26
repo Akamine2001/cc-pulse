@@ -62,9 +62,10 @@ function App() {
       const response = await fetch('/api/dates');
       if (!response.ok) {
         // APIエラー（サーバーからエラーレスポンス）
+        const errorData = await response.json() as { error?: string };
         setError({
           type: 'api',
-          message: '収集日時リストの取得に失敗しました',
+          message: errorData.error || '収集日時リストの取得に失敗しました',
           timestamp: new Date().toLocaleString('ja-JP', {
             year: 'numeric',
             month: '2-digit',
@@ -113,9 +114,10 @@ function App() {
         const response = await fetch(`/api/news/${selectedDatetime}`);
         if (!response.ok) {
           // APIエラー（サーバーからエラーレスポンス）
+          const errorData = await response.json() as { error?: string };
           setError({
             type: 'api',
-            message: 'ニュースデータの取得に失敗しました',
+            message: errorData.error || 'ニュースデータの取得に失敗しました',
             timestamp: new Date().toLocaleString('ja-JP', {
               year: 'numeric',
               month: '2-digit',
