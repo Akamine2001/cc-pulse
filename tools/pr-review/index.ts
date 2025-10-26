@@ -8,7 +8,7 @@
 
 import { Octokit } from 'octokit';
 import { validateEnv } from './shared/env';
-import { GitHubClient } from './lib/github';
+import { PRClient } from '../shared/github/pr-client';
 import { ReviewOrchestrator } from './core/orchestrator';
 
 /**
@@ -29,7 +29,7 @@ async function main() {
   const octokit = new Octokit({ auth: env.GITHUB_TOKEN });
 
   // GitHub Client初期化
-  const githubClient = new GitHubClient(octokit, owner, repo);
+  const githubClient = new PRClient(octokit, owner, repo);
 
   // Review Orchestrator初期化
   const orchestrator = new ReviewOrchestrator(

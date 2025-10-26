@@ -1,0 +1,61 @@
+name: Feature Reviewer
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  generate-guidelines:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # リポジトリのチェックアウト
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Bun環境セットアップ
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # 依存関係インストール
+      - name: Install Dependencies
+        run: |
+          bun install
+
+      # Python環境セットアップ（Serena MCP用）
+      - name: Setup Python for Serena MCP
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # uv インストール（Serena MCP管理用）
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      # Feature Reviewer実行
+      - name: Run Feature Reviewer
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          bun run tools/feature-reviewer/index.ts
+
+      # エラー時のフォールバック
+      - name: Fallback Comment on Error
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            --body "⚠️ レビュー・テスト観点の自動生成でエラーが発生しました。ログを確認してください。"

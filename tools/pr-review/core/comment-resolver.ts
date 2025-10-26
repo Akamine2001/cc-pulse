@@ -6,7 +6,7 @@
 
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { ClaudeAgent } from '../lib/claude';
+import { ClaudeAgent } from '../../shared/claude/agent';
 import { loadResolveCommentPrompt } from '../lib/files';
 import type { ReviewComment } from '../shared/schemas';
 import type { FileDiff } from '../lib/files';

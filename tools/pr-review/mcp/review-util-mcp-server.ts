@@ -19,7 +19,8 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { existsSync } from 'fs';
 import { Octokit } from 'octokit';
-import { GitHubClient, ThreadResolver } from '../lib/github';
+import { PRClient } from '../../shared/github/pr-client';
+import { ThreadResolver } from '../../shared/github/thread-resolver';
 import { BOT_SIGNATURE } from '../shared/constants';
 
 // Import schemas from shared
@@ -30,7 +31,7 @@ const commentsByFile = new Map<string, ReviewComment[]>();
 
 // GitHub clients (initialized from environment variables)
 let octokit: Octokit | null = null;
-let githubClient: GitHubClient | null = null;
+let prClient: PRClient | null = null;
 let threadResolver: ThreadResolver | null = null;
 let prNumber: number = 0;
 let prAuthor: string = '';
@@ -92,6 +93,12 @@ function initializeGitHubClients() {
   const prNumberStr = process.env.PR_NUMBER;
   prAuthor = process.env.PR_AUTHOR || '';
   headSha = process.env.HEAD_SHA || '';
+  const isLocalMode = process.env.LOCAL_MODE === 'true';
+
+  if (isLocalMode) {
+    console.error('[MCP] Running in LOCAL_MODE - GitHub posting disabled');
+    return;
+  }
 
   if (!token || !owner || !repo || !prNumberStr) {
     console.error('[MCP] Missing required environment variables for GitHub API');
@@ -100,7 +107,7 @@ function initializeGitHubClients() {
 
   prNumber = parseInt(prNumberStr, 10);
   octokit = new Octokit({ auth: token });
-  githubClient = new GitHubClient(octokit, owner, repo);
+  prClient = new PRClient(octokit, owner, repo);
   threadResolver = new ThreadResolver(octokit);
 
   console.error('[MCP] GitHub clients initialized');
@@ -236,7 +243,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
 
     // GitHub clients check
-    if (!githubClient || !octokit) {
+    if (!prClient || !octokit) {
       console.error('[MCP] GitHub clients not initialized, skipping GitHub posting');
       return {
         content: [
@@ -260,25 +267,105 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
-    try {
-      // GitHub comment posting
-      const reviewResult = {
-        issues: input.issues,
-        summary: input.summary,
-        stats: input.stats
-      };
+    const reviewResult = {
+      issues: input.issues,
+      summary: input.summary,
+      stats: input.stats
+    };
 
+    const isLocalMode = process.env.LOCAL_MODE === 'true';
+
+    if (isLocalMode) {
+      // ローカルモード: mdファイルに保存
+      try {
+        console.error('[MCP] LOCAL_MODE detected - saving to file instead of GitHub...');
+
+        const { formatReviewAsMarkdown } = await import('../shared/formatter.js');
+        const reviewMarkdown = formatReviewAsMarkdown(reviewResult);
+
+        // インラインコメントもMarkdownに追加
+        const inlineIssues = reviewResult.issues.filter(
+          issue => issue.file_path && issue.line_range
+        );
+
+        let fullMarkdown = `# PR #${prNumber} 自動レビュー結果\n\n`;
+        fullMarkdown += `## 📊 サマリー\n\n${reviewMarkdown}\n\n`;
+
+        if (inlineIssues.length > 0) {
+          fullMarkdown += `---\n\n## 💬 インラインコメント\n\n`;
+
+          // ファイルごとにグループ化
+          const byFile = new Map<string, typeof inlineIssues>();
+          for (const issue of inlineIssues) {
+            const file = issue.file_path!;
+            if (!byFile.has(file)) {
+              byFile.set(file, []);
+            }
+            byFile.get(file)!.push(issue);
+          }
+
+          for (const [file, issues] of byFile.entries()) {
+            fullMarkdown += `### ${file}\n\n`;
+            for (const issue of issues) {
+              fullMarkdown += `#### Line ${issue.line_range!.start}-${issue.line_range!.end} (${issue.severity})\n\n`;
+              fullMarkdown += `${issue.description}\n\n`;
+              if (issue.suggestion) {
+                fullMarkdown += `**提案**:\n${issue.suggestion}\n\n`;
+              }
+            }
+          }
+        }
+
+        // outputディレクトリに保存
+        const { dirname, join } = await import('path');
+        const { mkdir } = await import('fs/promises');
+        const { fileURLToPath } = await import('url');
+
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = dirname(__filename);
+        const outputDir = join(__dirname, '../../output');
+        const outputPath = join(outputDir, `pr-${prNumber}-review.md`);
+
+        await mkdir(outputDir, { recursive: true });
+        await Bun.write(outputPath, fullMarkdown);
+
+        console.error(`[MCP] Review saved to: ${outputPath}`);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ Review saved to file (LOCAL_MODE).\n\nFile: ${outputPath}\n\nTotal issues: ${actualStats.total_issues}\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}`
+            }
+          ]
+        };
+      } catch (error) {
+        console.error('[MCP] Failed to save review to file:', error);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Failed to save review to file: ${error instanceof Error ? error.message : String(error)}`
+            }
+          ],
+          isError: true
+        };
+      }
+    }
+
+    // 通常モード: GitHubに投稿
+    try {
       // 1. Post inline comments
       console.error('[MCP] Posting inline comments to GitHub...');
       const { postInlineComments } = await import('../lib/github.js');
-      await postInlineComments(githubClient, reviewResult, headSha, prNumber);
+      await postInlineComments(prClient, reviewResult, headSha, prNumber);
 
       // 2. Post summary comment
       console.error('[MCP] Posting summary comment to GitHub...');
       const { postReviewSummaryComment } = await import('../lib/github.js');
       const { formatReviewAsMarkdown } = await import('../shared/formatter.js');
       const reviewMarkdown = formatReviewAsMarkdown(reviewResult);
-      await postReviewSummaryComment(githubClient, prNumber, reviewMarkdown);
+      await postReviewSummaryComment(prClient, prNumber, reviewMarkdown);
 
       return {
         content: [
@@ -304,13 +391,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'get_comments_for_file') {
     const { file_path } = args as { file_path: string };
-    const comments = commentsByFile.get(file_path) || [];
+    const allComments = commentsByFile.get(file_path) || [];
+
+    // Resolve済みコメントを除外
+    const unresolvedComments = allComments.filter(c => !c.is_resolved);
+
+    console.error(`[MCP] get_comments_for_file: ${file_path} - ${allComments.length} total, ${unresolvedComments.length} unresolved`);
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(comments, null, 2)
+          text: JSON.stringify(unresolvedComments, null, 2)
         }
       ]
     };
@@ -324,7 +416,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       reasoning: string;
     };
 
-    if (!githubClient || !threadResolver) {
+    if (!prClient || !threadResolver) {
       return {
         content: [
           {
@@ -340,7 +432,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       switch (action) {
         case 'no_change':
           // 差分なし → 警告コメント
-          await githubClient.postReplyComment(
+          await prClient.postReplyComment(
             prNumber,
             comment_id,
             `⚠️ このファイルはコメント投稿後に変更されていません。\n\n${reasoning}\n\n引き続き対応をお願いします 🙏\n\n_- ${BOT_SIGNATURE}_`
@@ -350,7 +442,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         case 'has_replies':
           // 返信あり → オーナーメンション
-          await githubClient.postReplyComment(
+          await prClient.postReplyComment(
             prNumber,
             comment_id,
             `@${prAuthor} こちらのConversationについて、判断をお願いします。\n\n${reasoning}\n\nファイルに変更がありましたが、議論が継続中のため、自動クローズしていません。\n\n_- ${BOT_SIGNATURE}_`
@@ -364,7 +456,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             await threadResolver.resolveThread(thread_id);
             console.error(`[MCP] Resolved thread ${thread_id}`);
           }
-          await githubClient.postReplyComment(
+          await prClient.postReplyComment(
             prNumber,
             comment_id,
             `✅ 実装が大幅に変更されました\n\n${reasoning}\n\n前回の指摘は無効になりました。新しい実装に問題があれば、次のレビューでお知らせします。\n\n_- ${BOT_SIGNATURE}_`
@@ -378,7 +470,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             await threadResolver.resolveThread(thread_id);
             console.error(`[MCP] Resolved thread ${thread_id}`);
           }
-          await githubClient.postReplyComment(
+          await prClient.postReplyComment(
             prNumber,
             comment_id,
             `✅ TODO/コメントで対応計画が記載されました\n\n${reasoning}\n\n対応計画が明確なため、クローズします。\n\n_- ${BOT_SIGNATURE}_`
@@ -388,7 +480,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         case 'not_resolved':
           // 未解決 → 再コメント
-          await githubClient.postReplyComment(
+          await prClient.postReplyComment(
             prNumber,
             comment_id,
             `⚠️ まだ根本的な解決に至っていません\n\n${reasoning}\n\n引き続き対応をお願いします 🙏\n\n_- ${BOT_SIGNATURE}_`

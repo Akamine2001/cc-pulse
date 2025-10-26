@@ -5,10 +5,8 @@
 
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import type { ReviewResult } from '../shared/schemas';
-import { ClaudeAgent } from '../lib/claude';
-import { loadReviewPrompt } from '../lib/files';
-import { saveDiffByFiles, deleteTempDiffFiles, type FileDiff } from '../lib/files';
+import { ClaudeAgent } from '../../shared/claude/agent';
+import { loadReviewPrompt, type FileDiff } from '../lib/files';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -93,40 +91,31 @@ export class PRReviewer {
         'mcp__serena__initial_instructions',
         'mcp__serena__insert_at_line'
       ],
-      maxTurns: 70
+      maxTurns: 150
     });
   }
 
   /**
    * PRの差分をレビューしてGitHubにコメント投稿
    *
-   * @param diff PR差分
+   * @param diffFiles 差分ファイル情報の配列
    * @param reviewGuidelines レビュー観点
    */
   async review(
-    diff: string,
+    diffFiles: FileDiff[],
     reviewGuidelines: string
   ): Promise<void> {
-    // 差分をファイル単位で分割して一時ファイルに保存
-    const fileDiffs = saveDiffByFiles(diff);
+    // プロンプトを生成（ファイル単位の差分リストを渡す）
+    const promptText = this.buildPrompt(diffFiles, reviewGuidelines);
 
-    try {
-      // プロンプトを生成（ファイル単位の差分リストを渡す）
-      const promptText = this.buildPrompt(fileDiffs, reviewGuidelines);
+    console.log('🤖 Starting Claude code review with Agent SDK...');
 
-      console.log('🤖 Starting Claude code review with Agent SDK...');
+    // ClaudeAgentでレビューを実行（submit_review内でGitHub投稿）
+    await this.agent.query({
+      prompt: promptText
+    });
 
-      // ClaudeAgentでレビューを実行（submit_review内でGitHub投稿）
-      await this.agent.query({
-        prompt: promptText
-      });
-
-      console.log('✅ Review completed (posted to GitHub via submit_review tool)');
-
-    } finally {
-      // 一時ファイルをクリーンアップ
-      deleteTempDiffFiles(fileDiffs);
-    }
+    console.log('✅ Review agent execution completed');
   }
 
   /**

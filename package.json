@@ -23,6 +23,7 @@
     "dev:css": "tailwindcss -i src/templates/styles.css -o src/templates/styles.built.css --watch",
     "review:pr": "bun run tools/pr-review/index.ts",
     "review:local": "bash tools/pr-review/local-review.sh",
+    "feature-review:local": "bash tools/feature-reviewer/local-feature.sh",
     "test": "bun test",
     "lint": "tsc --noEmit"
   },

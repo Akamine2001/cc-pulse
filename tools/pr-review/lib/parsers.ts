@@ -242,7 +242,9 @@ export async function collectExistingConversations(
         description: issueData.description,
         original_comment: comment.body,
         created_at: comment.created_at,
-        updated_at: comment.updated_at
+        updated_at: comment.updated_at,
+        thread_id: null,  // orchestrator.tsで後から設定される
+        is_resolved: false  // orchestrator.tsで後から設定される
       });
     }
   }

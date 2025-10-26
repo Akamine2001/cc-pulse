@@ -87,4 +87,6 @@ export interface ReviewComment {
   original_comment: string;
   created_at: string;
   updated_at: string;
+  thread_id: string | null;
+  is_resolved: boolean;
 }

@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# Local PR Review Script
-# Usage: bun run review:local <PR_NUMBER>
+# Local Feature Review Script
+# Usage: bun run feature:local <ISSUE_NUMBER>
 
 # Colors for output
 RED='\033[0;31m'
@@ -12,13 +12,13 @@ NC='\033[0m' # No Color
 
 # Check arguments
 if [ $# -eq 0 ]; then
-  echo -e "${RED}❌ Error: PR number is required${NC}"
-  echo "Usage: bun run review:local <PR_NUMBER>"
-  echo "Example: bun run review:local 8"
+  echo -e "${RED}❌ Error: Issue number is required${NC}"
+  echo "Usage: bun run feature:local <ISSUE_NUMBER>"
+  echo "Example: bun run feature:local 8"
   exit 1
 fi
 
-PR_NUMBER=$1
+ISSUE_NUMBER=$1
 
 # Check required commands
 if ! command -v gh &> /dev/null; then
@@ -58,54 +58,57 @@ else
   exit 1
 fi
 
-echo -e "${GREEN}🚀 Starting local PR review${NC}"
+echo -e "${GREEN}🚀 Starting local feature review${NC}"
 echo -e "  Repository: ${GITHUB_REPOSITORY}"
-echo -e "  PR Number: ${PR_NUMBER}"
+echo -e "  Issue Number: ${ISSUE_NUMBER}"
 echo ""
 
-# Fetch PR diff
-echo -e "${YELLOW}📥 Fetching PR diff...${NC}"
-if ! gh pr diff "$PR_NUMBER" > pr-diff.txt 2>&1; then
-  echo -e "${RED}❌ Error: Failed to fetch PR diff${NC}"
-  echo "Make sure PR #${PR_NUMBER} exists and you have access"
+# Check if issue exists and get title
+echo -e "${YELLOW}📥 Checking if issue exists...${NC}"
+ISSUE_DATA=$(gh issue view "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --json title 2>&1)
+
+if [ $? -ne 0 ]; then
+  echo -e "${RED}❌ Error: Failed to fetch issue #${ISSUE_NUMBER}${NC}"
+  echo "Make sure Issue #${ISSUE_NUMBER} exists and you have access"
+  echo ""
+  echo "Error output:"
+  echo "$ISSUE_DATA"
   exit 1
 fi
 
-DIFF_SIZE=$(wc -l < pr-diff.txt | tr -d ' ')
-echo -e "${GREEN}✅ Fetched PR diff (${DIFF_SIZE} lines)${NC}"
-echo ""
+ISSUE_TITLE=$(echo "$ISSUE_DATA" | jq -r '.title')
 
-# Get PR author
-PR_AUTHOR=$(gh pr view "$PR_NUMBER" --json author --jq '.author.login' 2>/dev/null || echo "$OWNER")
+if [ -z "$ISSUE_TITLE" ] || [ "$ISSUE_TITLE" == "null" ]; then
+  echo -e "${RED}❌ Error: Issue #${ISSUE_NUMBER} not found${NC}"
+  exit 1
+fi
+echo -e "${GREEN}✅ Issue found: ${ISSUE_TITLE}${NC}"
+echo ""
 
 # Export environment variables
 export GITHUB_REPOSITORY
-export PR_NUMBER
-export PR_AUTHOR
+export ISSUE_NUMBER
 export LOCAL_MODE=true  # ローカルモード: mdファイルに保存
 
-# Run review
-echo -e "${YELLOW}🤖 Starting PR review (Local Mode)...${NC}"
+# Run feature reviewer
+echo -e "${YELLOW}🤖 Starting issue analysis (Local Mode)...${NC}"
 echo -e "${YELLOW}   (This may take several minutes)${NC}"
-echo -e "${YELLOW}   Review will be saved to tools/pr-review/output/${NC}"
+echo -e "${YELLOW}   Guidelines will be saved to tools/feature-reviewer/output/${NC}"
 echo ""
 
 # Execute review and output to both terminal and log.md (in mcp directory)
-LOG_FILE="tools/pr-review/mcp/log.md"
-bun run tools/pr-review/index.ts 2>&1 | tee "$LOG_FILE"
+LOG_FILE="tools/feature-reviewer/mcp/log.md"
+bun run tools/feature-reviewer/index.ts 2>&1 | tee "$LOG_FILE"
 
 EXIT_CODE=${PIPESTATUS[0]}
-
-# Cleanup
-rm -f pr-diff.txt
 
 # Check result
 echo ""
 if [ $EXIT_CODE -eq 0 ]; then
-  echo -e "${GREEN}✅ Review completed successfully!${NC}"
+  echo -e "${GREEN}✅ Feature review completed successfully!${NC}"
   echo -e "  Log saved to: $LOG_FILE"
 else
-  echo -e "${RED}❌ Review failed with exit code: ${EXIT_CODE}${NC}"
+  echo -e "${RED}❌ Feature review failed with exit code: ${EXIT_CODE}${NC}"
   echo -e "  Check $LOG_FILE for details"
   exit $EXIT_CODE
 fi

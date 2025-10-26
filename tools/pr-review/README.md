@@ -19,34 +19,47 @@ cc-pulse用のGitHub Actions自動PRレビューツール（Phase 2.0）
 機能ベースのシンプルな構造で構成:
 
 ```
-tools/pr-review/
-├── index.ts                          # エントリーポイント
-├── review-guidelines.md              # レビュー観点（編集可能）
+tools/
+├── shared/                           # 共通処理（PR Review & Feature Reviewer）
+│   ├── claude/
+│   │   └── agent.ts                  # Claude Agent SDK wrapper
+│   └── github/
+│       ├── issue-client.ts           # Issue操作専門
+│       ├── pr-client.ts              # PR操作専門
+│       └── thread-resolver.ts        # Thread操作専門
 │
-├── core/                             # コア処理
-│   ├── orchestrator.ts               # メインフロー制御
-│   ├── reviewer.ts                   # レビュー実行（ClaudeAgent使用）
-│   └── comment-resolver.ts           # コメント解決（ClaudeAgent使用）
-│
-├── lib/                              # 補助機能
-│   ├── claude.ts                     # Claude Agent SDK wrapper
-│   ├── github.ts                     # GitHub API統合
-│   ├── files.ts                      # ファイルI/O統合
-│   └── parsers.ts                    # パース処理
-│
-├── mcp/                              # MCPサーバー
-│   └── review-util-mcp-server.ts
-│
-├── prompts/                          # プロンプトテンプレート
-│   ├── review-prompt.md
-│   └── resolve-comment-prompt.md
-│
-└── shared/                           # 共通定義
-    ├── types.ts                      # 型定義
-    ├── schemas.ts                    # Zodスキーマ
-    ├── constants.ts
-    ├── env.ts
-    └── formatter.ts
+└── pr-review/
+    ├── index.ts                      # エントリーポイント
+    ├── review-guidelines.md          # レビュー観点（編集可能）
+    ├── local-review.sh               # ローカル実行スクリプト
+    │
+    ├── core/                         # コア処理
+    │   ├── orchestrator.ts           # メインフロー制御
+    │   ├── reviewer.ts               # レビュー実行（ClaudeAgent使用）
+    │   └── comment-resolver.ts       # コメント解決（ClaudeAgent使用）
+    │
+    ├── lib/                          # 補助機能
+    │   ├── github.ts                 # PR Review特有のロジック
+    │   ├── files.ts                  # ファイルI/O統合
+    │   └── parsers.ts                # パース処理
+    │
+    ├── mcp/                          # MCPサーバー
+    │   └── review-util-mcp-server.ts
+    │
+    ├── output/                       # ローカルモード出力（gitignore）
+    │   ├── .gitignore                # *.mdを除外
+    │   └── pr-N-review.md            # 生成されたレビュー結果
+    │
+    ├── prompts/                      # プロンプトテンプレート
+    │   ├── review-prompt.md
+    │   └── resolve-comment-prompt.md
+    │
+    └── shared/                       # PR Review固有の定義
+        ├── types.ts                  # 型定義
+        ├── schemas.ts                # Zodスキーマ
+        ├── constants.ts
+        ├── env.ts
+        └── formatter.ts
 ```
 
 ## 使用方法
@@ -55,17 +68,52 @@ tools/pr-review/
 
 `.github/workflows/pr-review.yml`で自動実行されます。
 
-### ローカルでの実行
+### ローカルでの実行（推奨）
+
+PR番号を指定してローカルで実行できます。
 
 ```bash
-# 環境変数を設定
+# 環境変数を設定（.envrcなどで事前設定推奨）
+export CLAUDE_CODE_OAUTH_TOKEN="your-token"
+export GITHUB_TOKEN="your-github-token"
+
+# PR番号を指定して実行（mdファイルに保存）
+bun run review:local 8
+```
+
+**動作（ローカルモード）**:
+1. `gh pr diff` でPR差分を取得
+2. リポジトリ情報を自動検出（git remote）
+3. PR Reviewを実行
+4. **レビュー結果をmdファイルに保存** (`tools/pr-review/output/pr-8-review.md`)
+   - サマリー（統計情報、全体の結果）
+   - インラインコメント（各ファイル・各行の問題）
+5. ログを `tools/pr-review/mcp/log.md` に保存
+
+**要件**:
+- GitHub CLI (`gh`) がインストールされていること
+- `CLAUDE_CODE_OAUTH_TOKEN` と `GITHUB_TOKEN` が設定されていること
+
+**メリット**:
+- ✅ GitHubに余計なコメントを投稿しない（テスト時に便利）
+- ✅ 生成内容をすぐに確認できる
+- ✅ mdファイルとして保存されるので再利用可能
+
+**GitHubに投稿したい場合**:
+1. コードをPRでマージ
+2. 新しいPRを作成（GitHub Actionsが自動実行される）
+
+### 手動実行（環境変数を明示的に設定）
+
+```bash
+# 環境変数を手動設定
 export CLAUDE_CODE_OAUTH_TOKEN="your-token"
 export GITHUB_TOKEN="your-github-token"
 export PR_NUMBER="123"
 export GITHUB_REPOSITORY="owner/repo"
 export PR_AUTHOR="username"
 
-# 実行
+# 直接実行
 bun run tools/pr-review/index.ts
 # または
 bun run review:pr
@@ -80,6 +128,19 @@ bun run review:pr
 | `PR_NUMBER` | ◯ | PR番号 |
 | `GITHUB_REPOSITORY` | ◯ | リポジトリ（owner/repo形式） |
 | `PR_AUTHOR` | △ | PR作成者（メンション用） |
+| `LOCAL_MODE` | △ | `true`でローカルモード（mdファイル保存、GitHub投稿なし） |
+
+### LOCAL_MODEの動作
+
+**LOCAL_MODE=true（ローカルモード）**:
+- レビュー結果を `tools/pr-review/output/pr-N-review.md` に保存
+- GitHubには何も投稿しない
+- テスト・確認用
+
+**LOCAL_MODE未設定（通常モード）**:
+- インラインコメントをPRに投稿
+- サマリーコメントをPRに投稿
+- 本番用
 
 ## レビュープロセス（Phase 2.0）
 
@@ -175,12 +236,45 @@ bun run review:pr
 
 ## 開発
 
+### 共通クライアントの使用
+
+PR Reviewは `tools/shared/` の共通クライアントを使用しています。
+
+**ClaudeAgent**:
+```typescript
+import { ClaudeAgent } from '../../shared/claude/agent';
+
+const agent = new ClaudeAgent({
+  mcpServers: { ... },
+  allowedTools: [ ... ],
+  maxTurns: 150
+});
+```
+
+**PRClient** (旧GitHubClient):
+```typescript
+import { PRClient } from '../../shared/github/pr-client';
+
+const prClient = new PRClient(octokit, owner, repo);
+await prClient.getLatestCommitSha(prNumber);
+await prClient.postReviewComment(...);
+```
+
+**ThreadResolver**:
+```typescript
+import { ThreadResolver } from '../../shared/github/thread-resolver';
+
+const resolver = new ThreadResolver(octokit);
+await resolver.resolveThread(threadId);
+```
+
 ### 新機能追加時の注意
 
 1. **依存関係**: 上位層 → 下位層の一方向のみ
 2. **副作用の分離**: ドメイン層は純粋関数を優先
 3. **エラーハンドリング**: try-catchは最上位層で
 4. **テスタビリティ**: 依存性注入を活用
+5. **共通クライアント**: GitHub/Claude操作は `tools/shared/` を使用
 
 ### ファイルサイズ制約
 
@@ -204,6 +298,15 @@ CLAUDE.mdの規約に従い、各ファイル300行以内を目標とする。
 - 解決: GitHub Actionsで`gh pr diff`を実行
 
 ## 変更履歴
+
+### Phase 2.1（リファクタリング）
+
+- ✅ 共通クライアントの抽出（`tools/shared/`）
+  - `ClaudeAgent` → `tools/shared/claude/agent.ts`
+  - `GitHubClient` → `tools/shared/github/pr-client.ts` (PRClient)
+  - `ThreadResolver` → `tools/shared/github/thread-resolver.ts`
+- ✅ 機能ごとに分離（IssueClient, PRClient, ThreadResolver）
+- ✅ Feature Reviewerとの共通基盤整備
 
 ### Phase 2.0（新仕様）
 

@@ -11,12 +11,13 @@ import { PRReviewer } from './reviewer';
 import { CommentResolver } from './comment-resolver';
 import { collectExistingConversations } from '../lib/parsers';
 import { readPRDiff, readReviewGuidelines, saveDiffByFiles, deleteTempDiffFiles } from '../lib/files';
-import { GitHubClient, ThreadResolver } from '../lib/github';
+import { PRClient } from '../../shared/github/pr-client';
+import { ThreadResolver } from '../../shared/github/thread-resolver';
 
 export class ReviewOrchestrator {
   constructor(
     private octokit: Octokit,
-    private githubClient: GitHubClient,
+    private githubClient: PRClient,
     private owner: string,
     private repo: string,
     private prNumber: number,
@@ -59,23 +60,32 @@ export class ReviewOrchestrator {
       const threadMap = await threadResolver.buildThreadMap(this.owner, this.repo, this.prNumber);
       console.log(`✅ Built thread map: ${threadMap.size} comments mapped`);
 
-      // 5. 既存コメントにthreadIdを追加
-      const commentsWithThreadIds = existingConversations.map(comment => ({
-        ...comment,
-        thread_id: threadMap.get(comment.comment_id) || null
-      }));
+      // 5. Resolve済みthread IDを取得
+      console.log('🔍 Fetching resolved thread IDs...');
+      const resolvedThreadIds = await threadResolver.getResolvedThreadIds(this.owner, this.repo, this.prNumber);
+      console.log(`✅ Found ${resolvedThreadIds.size} resolved threads`);
 
-      // 6. 既存コメントをJSONファイルに保存
+      // 6. 既存コメントにthreadIdとis_resolvedを追加
+      const commentsWithThreadIds = existingConversations.map(comment => {
+        const threadId = threadMap.get(comment.comment_id) || null;
+        return {
+          ...comment,
+          thread_id: threadId,
+          is_resolved: threadId ? resolvedThreadIds.has(threadId) : false
+        };
+      });
+
+      // 7. 既存コメントをJSONファイルに保存
       await Bun.write(commentsFilePath, JSON.stringify(commentsWithThreadIds, null, 2));
       console.log(`✅ Saved ${commentsWithThreadIds.length} comments to ${commentsFilePath}`);
 
-      // 7. PR差分を読み込んでファイル単位で分割保存
+      // 8. PR差分を読み込んでファイル単位で分割保存
       console.log('📖 Reading PR diff...');
       const diff = readPRDiff();
       const diffFiles = saveDiffByFiles(diff);
       console.log(`✅ Saved ${diffFiles.length} diff files`);
 
-      // 8. 前回コメントを解決（Claude Agent SDKで判定）
+      // 9. 前回コメントを解決（Claude Agent SDKで判定）
       if (commentsWithThreadIds.length > 0) {
         console.log('');
         console.log('🔄 Resolving previous comments...');
@@ -89,12 +99,26 @@ export class ReviewOrchestrator {
           this.prNumber,
           this.prAuthor
         );
+
+        // 10. CommentResolver実行後にResolve状態を更新
+        console.log('🔄 Updating resolved status after comment resolution...');
+        const updatedResolvedIds = await threadResolver.getResolvedThreadIds(
+          this.owner,
+          this.repo,
+          this.prNumber
+        );
+        console.log(`✅ Found ${updatedResolvedIds.size} resolved threads (after resolution)`);
+
+        const updatedComments = commentsWithThreadIds.map(comment => ({
+          ...comment,
+          is_resolved: comment.thread_id ? updatedResolvedIds.has(comment.thread_id) : false
+        }));
+
+        await Bun.write(commentsFilePath, JSON.stringify(updatedComments, null, 2));
+        console.log(`✅ Updated ${updatedComments.length} comments with latest resolve status`);
       } else {
         console.log('✅ No previous comments to resolve');
       }
-
-      // 9. 差分一時ファイルをクリーンアップ
-      deleteTempDiffFiles(diffFiles);
 
       // ====== Phase 2: 新規レビュー実施 ======
 
@@ -113,9 +137,12 @@ export class ReviewOrchestrator {
         this.prNumber
       );
       await reviewer.review(
-        diff,
+        diffFiles,
         reviewGuidelines
       );
+
+      // 11. 差分一時ファイルをクリーンアップ
+      deleteTempDiffFiles(diffFiles);
 
       console.log('');
       console.log('✅ Review process completed successfully!');
