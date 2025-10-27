@@ -71,10 +71,9 @@ console.log('[OK] Configuration saved');  // Bad（既存と異なる）
   - `process.env.GITHUB_TOKEN`
 
 #### コーディングスタイル
-- [ ] CLAUDE.mdの規約に準拠しているか
-  - インデント: 2スペース
-  - セミコロン: 使用する
-  - 命名: camelCase（変数・関数）、PascalCase（型・クラス）、kebab-case（ファイル名）
+- [ ] インデントが2スペースで統一されているか
+- [ ] セミコロンが使用されているか
+- [ ] 命名規則が一貫しているか
 
 ---
 

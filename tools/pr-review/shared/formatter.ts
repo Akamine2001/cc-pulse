@@ -47,6 +47,17 @@ function formatIssue(issue: ReviewIssue): string {
   markdown += `  - **影響**: ${issue.impact}\n`;
   markdown += `  - **推奨対応**: ${issue.suggestion}\n`;
 
+  // 根拠がある場合は追加
+  if (issue.evidence && issue.evidence.length > 0) {
+    markdown += '\n**根拠**:\n';
+    issue.evidence.forEach((ev, index) => {
+      markdown += `${index + 1}. \`${ev.file}:${ev.line}\` - ${ev.description}\n`;
+      if (ev.code_snippet) {
+        markdown += `   \`\`\`typescript\n   ${ev.code_snippet}\n   \`\`\`\n`;
+      }
+    });
+  }
+
   return markdown;
 }
 
@@ -66,6 +77,18 @@ export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: str
 
   markdown += `\n**影響**: ${issue.impact}`;
   markdown += `\n**推奨対応**: ${issue.suggestion}`;
+
+  // 根拠がある場合は追加
+  if (issue.evidence && issue.evidence.length > 0) {
+    markdown += '\n\n**根拠**:\n';
+    issue.evidence.forEach((ev, index) => {
+      markdown += `${index + 1}. \`${ev.file}:${ev.line}\` - ${ev.description}\n`;
+      if (ev.code_snippet) {
+        markdown += `   \`\`\`typescript\n   ${ev.code_snippet}\n   \`\`\`\n`;
+      }
+    });
+  }
+
   markdown += `\n\n_- ${BOT_SIGNATURE}_`;
 
   return markdown;
