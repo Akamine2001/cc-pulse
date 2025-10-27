@@ -1,5 +1,5 @@
 import type { ReviewResult, ReviewIssue, ReviewSeverity } from './schemas';
-import { BOT_SIGNATURE } from './constants';
+import { BOT_SIGNATURE, AI_AGENT_MENTION } from './constants';
 
 /**
  * 重要度別の絵文字を取得
@@ -87,6 +87,11 @@ export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: str
         markdown += `   \`\`\`typescript\n   ${ev.code_snippet}\n   \`\`\`\n`;
       }
     });
+  }
+
+  // AIエージェントメンション（環境変数で指定された場合のみ）
+  if (AI_AGENT_MENTION) {
+    markdown += `\n\n@${AI_AGENT_MENTION}`;
   }
 
   markdown += `\n\n_- ${BOT_SIGNATURE}_`;
