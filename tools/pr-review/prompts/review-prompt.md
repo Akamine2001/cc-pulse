@@ -48,66 +48,49 @@ Read(file_path="/tmp/pr-review/xxx-1-src_utils_helper.ts.diff")
 
 差分だけでは変更の妥当性を判断できない場合、Serena MCPツールを使って周辺実装を確認してください。
 
-## Serena MCPの使い方
+**利用可能なツール**:
+- `mcp__serena__read_file` - ファイル全体を読む
+- `mcp__serena__find_symbol` - クラス・関数定義を探す
+- `mcp__serena__find_referencing_symbols` - 使用箇所を調べる（影響範囲分析）
+- `mcp__serena__search_for_pattern` - パターン検索
 
-### ファイル全体を読む
-変更されたファイルの全体像を把握したい場合：
-```
-mcp__serena__read_file
-  relative_path: "src/commands/setup.ts"
-```
-
-### クラス・関数定義を探す
-特定のクラスやメソッドの実装を確認したい場合：
-```
-mcp__serena__find_symbol
-  name_path: "PRReviewer/review"
-  relative_path: "tools/pr-review/core/reviewer.ts"
-  include_body: true
-  depth: 1
-```
-
-### 使用箇所を調べる（影響範囲分析）
-関数やクラスがどこで使われているか確認したい場合：
-```
-mcp__serena__find_referencing_symbols
-  name_path: "ClaudeAgent/query"
-  relative_path: "tools/pr-review/lib/claude.ts"
-```
-
-### ディレクトリ構造を確認
-モジュール構成を把握したい場合：
-```
-mcp__serena__list_dir
-  relative_path: "tools/pr-review/core"
-  recursive: false
-```
-
-### パターン検索
-類似コードや特定の実装パターンを探したい場合：
-```
-mcp__serena__search_for_pattern
-  substring_pattern: "await.*query\\("
-  relative_path: "tools/pr-review"
-```
-
-## レビュー戦略
-
-1. **差分確認**（Read）
-   - 何が変わったかを把握
-
-2. **周辺実装確認**（Serena MCP）
-   - 変更の妥当性を判断
-   - 影響範囲を把握
-   - アーキテクチャとの整合性を確認
-
-3. **既存コメント確認**（get_comments_for_file）
-   - 重複指摘を避ける
+詳細なパラメータはツールのスキーマを参照してください。
 
 # STEP 2: コードレビュー実施
 
 ## レビュー観点
 {{REVIEW_GUIDELINES}}
+
+**⚠️ 重要な制約**:
+- **レビューは上記の「レビュー観点」に記載された項目のみに基づいて実施してください**
+- CLAUDE.mdやその他のプロジェクト規約は参考情報ですが、**レビュー観点に記載されていない項目は指摘しないでください**
+- レビュー観点に記載されていない問題を発見した場合でも、指摘を控えてください
+- 例外: セキュリティ上の重大な問題（API KEY漏洩など）のみ、観点になくても指摘可
+
+**理由**: レビュー観点はIssueの要件に基づいて生成されており、Issueに関連しない指摘は不要です。
+
+**✅ 問題がない場合**:
+- **レビュー観点に照らして問題がない場合、`issues: []` で提出してください**
+- 無理に問題を見つける必要はありません
+- 良いコードは「問題なし」と評価することが適切です
+- 空配列はスキーマ上も有効であり、問題ありません
+
+## 根拠の明示（推奨）
+
+指摘する際は、可能な限り**根拠（evidence）**を明示してください。
+
+**evidenceフィールド（オプショナル）**:
+- 複数のファイルを確認して判断した場合に使用
+- どのコードを確認したかを明示することで、論理的な矛盾を自己検出
+- 推測による誤った指摘を防ぐ
+
+**重要な注意点**:
+- HTTPステータスコードと `response.ok` の関係を必ず確認
+  - status 200-299 → `response.ok = true`
+  - status 400-599 → `response.ok = false`
+- サーバー側のコードで `Response.json(..., { status: XXX })` を確認
+
+スキーマの詳細はツール定義を参照してください。
 
 # 重複チェックの方法
 
@@ -142,104 +125,23 @@ mcp__serena__search_for_pattern
 
 ## 🔹 Phase 1: フォーマット検証(必須)
 
-まず **mcp__review-util__format_review** を呼び出してデータ形式を検証:
+**mcp__review-util__format_review** を呼び出してデータ形式を検証してください。
 
-**EXAMPLE - Correct format with object stats**:
-```json
-{
-  "issues": [
-    {
-      "severity": "high",
-      "category": "セキュリティ",
-      "description": "問題の説明",
-      "file_path": "path/to/file.ts",
-      "line_range": { "start": 10, "end": 20 },
-      "impact": "影響範囲",
-      "suggestion": "推奨対応"
-    }
-  ],
-  "summary": "レビュー全体の総評(3-5文)",
-  "stats": {
-    "total_issues": 1,
-    "critical": 0,
-    "high": 1,
-    "medium": 0,
-    "low": 0
-  }
-}
-```
+**スキーマ**: ツールのJSON Schemaを参照（自動提供）
 
-**⚠️ CRITICAL**: The `stats` field MUST be an object (as shown above), NOT a JSON string.
-- ✅ Correct: `"stats": {"total_issues": 1, "critical": 0, ...}`
-- ❌ Wrong: `"stats": "{\"total_issues\": 1, \"critical\": 0, ...}"`
+**重要な注意点**:
+- `issues`は配列、`stats`はオブジェクトとして渡す（JSON文字列化しない）
+- 問題がない場合は `issues: []` で提出可能
+- `evidence`フィールドはオプショナル（根拠がある場合のみ）
 
-**CRITICAL - Tool Input Format**:
+**⚠️ よくあるエラー**:
+- ❌ `"stats": "{\"total_issues\": 1}"` （文字列化）
+- ✅ `"stats": {"total_issues": 1}` （オブジェクト）
 
-⚠️ **VERY IMPORTANT - stats must be an OBJECT, NOT a JSON string!**
-
-**Common mistake to avoid**:
-```json
-// ❌ WRONG - stats as JSON string
-{
-  "issues": [...],
-  "stats": "{\n  \"total_issues\": 1,\n  \"critical\": 0\n}"  // ← STRING! This will fail!
-}
-
-// ✅ CORRECT - stats as object
-{
-  "issues": [...],
-  "stats": {
-    "total_issues": 1,
-    "critical": 0,
-    "high": 1,
-    "medium": 0,
-    "low": 0
-  }  // ← OBJECT! This is correct!
-}
-```
-
-**Rules**:
-- **issues は配列として渡す** (NOT a JSON string)
-- **stats はオブジェクトとして渡す** (NOT a JSON string)
-- stats の各カウントは issues の内容と正確に一致させる
-- Never wrap objects or arrays in quotes - pass them directly as structured data
-- **format_reviewがバリデーションエラーを返した場合、エラーメッセージを読んで修正し、必ず再度format_reviewを呼び出す**
-- よくあるエラーと修正方法：
-  - **"'...' is not of type 'object'"** → statsをJSON文字列ではなく、オブジェクトとして渡す
-    - ❌ `"stats": "{\"total_issues\": 1}"`
-    - ✅ `"stats": {"total_issues": 1}`
-  - **"Expected array, received string"** → issuesをJSON文字列ではなく配列として渡す
-    - ❌ `"issues": "[{...}]"`
-    - ✅ `"issues": [{...}]`
-  - **"Required"** → 必須フィールドが欠けている
-  - **型不一致** → 正しい型（string, number, object, array）で渡す
-- **IMPORTANT**: Do NOT stringify objects or arrays. Pass them as direct data structures.
-- format_reviewが "✅ Validation passed!" を返すまで何度でもretryする
+バリデーションエラー時は必ず修正して再実行してください。
 
 ## 🔹 Phase 2: 最終提出(format_review成功後のみ)
 
-format_review が成功したら、**同じデータ**で **mcp__review-util__submit_review** を呼び出す:
+**mcp__review-util__submit_review** を呼び出してレビュー結果を提出してください。
 
-**EXAMPLE - Use the EXACT SAME format as format_review**:
-```json
-{
-  "issues": [...same array...],
-  "summary": "...same string...",
-  "stats": {
-    "total_issues": 1,
-    "critical": 0,
-    "high": 1,
-    "medium": 0,
-    "low": 0
-  }
-}
-```
-
-**⚠️ CRITICAL REMINDER**: 
-- **stats MUST be an object**, NOT a string: `{"total_issues": 1, ...}` ✅
-- **DO NOT stringify**: `"{\"total_issues\": 1, ...}"` ❌
-- Phase 1で検証済みのデータをそのまま使用
-- 必ず両方のツールを呼び出す(テキストでの返答は不要)
-- エラーが出たら即座にフォーマットを修正してretry
-
-**この2段階プロセスにより、フォーマットエラーを事前に検出し、確実にレビュー結果を提出できます。**
+**重要**: Phase 1で検証済みの**同じデータ**を使用してください。

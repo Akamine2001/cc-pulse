@@ -7,6 +7,18 @@ export const ReviewSeveritySchema = z.enum(['critical', 'high', 'medium', 'low']
 export type ReviewSeverity = z.infer<typeof ReviewSeveritySchema>;
 
 /**
+ * レビュー根拠
+ */
+export const EvidenceItemSchema = z.object({
+  file: z.string(),                    // ファイルパス（例: "serve.ts"）
+  line: z.number(),                    // 行番号（例: 96）
+  description: z.string(),             // この根拠が示すこと
+  code_snippet: z.string().optional()  // コードスニペット（オプション）
+});
+
+export type EvidenceItem = z.infer<typeof EvidenceItemSchema>;
+
+/**
  * 個別のレビュー問題
  */
 export const ReviewIssueSchema = z.object({
@@ -19,7 +31,8 @@ export const ReviewIssueSchema = z.object({
     end: z.number()
   }).optional(),
   impact: z.string(),
-  suggestion: z.string()
+  suggestion: z.string(),
+  evidence: z.array(EvidenceItemSchema).optional()  // 根拠（オプショナル）
 });;
 
 export type ReviewIssue = z.infer<typeof ReviewIssueSchema>;
