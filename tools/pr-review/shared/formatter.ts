@@ -1,5 +1,5 @@
 import type { ReviewResult, ReviewIssue, ReviewSeverity } from './schemas';
-import { BOT_SIGNATURE } from './constants';
+import { BOT_SIGNATURE, AI_AGENT_MENTION } from './constants';
 
 /**
  * 重要度別の絵文字を取得
@@ -53,7 +53,7 @@ function formatIssue(issue: ReviewIssue): string {
     issue.evidence.forEach((ev, index) => {
       markdown += `${index + 1}. \`${ev.file}:${ev.line}\` - ${ev.description}\n`;
       if (ev.code_snippet) {
-        markdown += `   \`\`\`typescript\n   ${ev.code_snippet}\n   \`\`\`\n`;
+        markdown += `\`\`\`typescript\n${ev.code_snippet}\n\`\`\`\n`;
       }
     });
   }
@@ -68,7 +68,13 @@ export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: str
   const emoji = getSeverityEmoji(issue.severity);
   const label = getSeverityLabel(issue.severity);
 
-  let markdown = `${emoji} **[${label}] ${issue.category}**: ${issue.description}\n`;
+  // AIエージェントメンション（constants.tsに設定されている場合のみ追加）
+  let markdown = '';
+  if (AI_AGENT_MENTION) {
+    markdown = `@${AI_AGENT_MENTION}\n\n`;
+  }
+
+  markdown += `${emoji} **[${label}] ${issue.category}**: ${issue.description}\n`;
 
   // コードスニペットがある場合は含める
   if (codeSnippet) {
@@ -84,7 +90,7 @@ export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: str
     issue.evidence.forEach((ev, index) => {
       markdown += `${index + 1}. \`${ev.file}:${ev.line}\` - ${ev.description}\n`;
       if (ev.code_snippet) {
-        markdown += `   \`\`\`typescript\n   ${ev.code_snippet}\n   \`\`\`\n`;
+        markdown += `\`\`\`typescript\n${ev.code_snippet}\n\`\`\`\n`;
       }
     });
   }
