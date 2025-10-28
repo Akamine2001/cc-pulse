@@ -68,7 +68,13 @@ export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: str
   const emoji = getSeverityEmoji(issue.severity);
   const label = getSeverityLabel(issue.severity);
 
-  let markdown = `${emoji} **[${label}] ${issue.category}**: ${issue.description}\n`;
+  // AIエージェントメンション（Google Jules連携）- 冒頭に配置
+  let markdown = '';
+  if (AI_AGENT_MENTION) {
+    markdown = `@${AI_AGENT_MENTION}\n\n`;
+  }
+
+  markdown += `${emoji} **[${label}] ${issue.category}**: ${issue.description}\n`;
 
   // コードスニペットがある場合は含める
   if (codeSnippet) {
@@ -87,11 +93,6 @@ export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: str
         markdown += `\`\`\`typescript\n${ev.code_snippet}\n\`\`\`\n`;
       }
     });
-  }
-
-  // AIエージェントメンション（Google Jules連携）
-  if (AI_AGENT_MENTION) {
-    markdown += `\n\n@${AI_AGENT_MENTION}`;
   }
 
   markdown += `\n\n_- ${BOT_SIGNATURE}_`;

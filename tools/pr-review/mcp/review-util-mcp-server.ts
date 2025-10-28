@@ -438,7 +438,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           await prClient.postReplyComment(
             prNumber,
             comment_id,
-            `⚠️ このファイルはコメント投稿後に変更されていません。\n\n${reasoning}\n\n引き続き対応をお願いします 🙏\n\n@${AI_AGENT_MENTION}\n\n_- ${BOT_SIGNATURE}_`
+            `@${AI_AGENT_MENTION}\n\n⚠️ このファイルはコメント投稿後に変更されていません。\n\n${reasoning}\n\n引き続き対応をお願いします 🙏\n\n_- ${BOT_SIGNATURE}_`
           );
           console.error(`[MCP] Posted warning for comment ${comment_id}`);
           break;
@@ -486,7 +486,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           await prClient.postReplyComment(
             prNumber,
             comment_id,
-            `⚠️ まだ根本的な解決に至っていません\n\n${reasoning}\n\n引き続き対応をお願いします 🙏\n\n@${AI_AGENT_MENTION}\n\n_- ${BOT_SIGNATURE}_`
+            `@${AI_AGENT_MENTION}\n\n⚠️ まだ根本的な解決に至っていません\n\n${reasoning}\n\n引き続き対応をお願いします 🙏\n\n_- ${BOT_SIGNATURE}_`
           );
           console.error(`[MCP] Posted reminder for comment ${comment_id}`);
           break;
