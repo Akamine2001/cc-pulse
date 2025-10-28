@@ -72,7 +72,6 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          AI_AGENT_MENTION: ${{ secrets.AI_AGENT_MENTION }}
         run: |
           bun run tools/pr-review/index.ts
 

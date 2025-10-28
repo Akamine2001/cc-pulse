@@ -129,7 +129,6 @@ bun run review:pr
 | `GITHUB_REPOSITORY` | ◯ | リポジトリ（owner/repo形式） |
 | `PR_AUTHOR` | △ | PR作成者（メンション用） |
 | `LOCAL_MODE` | △ | `true`でローカルモード（mdファイル保存、GitHub投稿なし） |
-| `AI_AGENT_MENTION` | △ | AIエージェントメンション（例: `jules`, `devin`） |
 
 ### LOCAL_MODEの動作
 
@@ -143,40 +142,25 @@ bun run review:pr
 - サマリーコメントをPRに投稿
 - 本番用
 
-### AI_AGENT_MENTIONの動作
+### Google Jules連携
 
-**AI_AGENT_MENTION=jules（Google Jules連携）**:
-- インラインコメントに`@jules`メンションを追加
-- Google Julesが自動的にコメントを読んで修正を実装
+このツールは**Google Jules AIエージェント**と連携しており、インラインコメントに`@jules`メンションを自動追加します。
+
+**動作フロー**:
+1. PRが作成される
+2. cc-pulse Auto-Reviewがコードレビューを実施
+3. インラインコメントに`@jules`メンションを含めて投稿
+4. Google Julesが自動的にコメントを読んで修正を実装
+5. 修正後のコミットをPRにpush
+
+**メリット**:
 - PRからコードレビュー、修正まで完全自動化
-
-**AI_AGENT_MENTION=devin（Devin連携）**:
-- インラインコメントに`@devin`メンションを追加
-- Devin AIエージェントが自動修正
-
-**AI_AGENT_MENTION未設定（デフォルト）**:
-- メンション無効
-- 人間によるレビュー・修正を想定
+- 人間の介入なしで品質向上
+- レビュー→修正のサイクルを高速化
 
 **注意**:
 - メンションは**インラインコメントのみ**に追加されます
 - サマリーコメントには追加されません
-- ローカルモードでもメンションは含まれます（プレビュー用）
-
-**使用例**:
-```bash
-# Google Jules連携
-export AI_AGENT_MENTION=jules
-bun run review:pr
-
-# Devin連携
-export AI_AGENT_MENTION=devin
-bun run review:pr
-
-# メンション無効（デフォルト）
-unset AI_AGENT_MENTION
-bun run review:pr
-```
 
 ## レビュープロセス（Phase 2.0）
 
