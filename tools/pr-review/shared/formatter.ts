@@ -68,7 +68,7 @@ export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: str
   const emoji = getSeverityEmoji(issue.severity);
   const label = getSeverityLabel(issue.severity);
 
-  // AIエージェントメンション（Google Jules連携）- 冒頭に配置
+  // AIエージェントメンション（constants.tsに設定されている場合のみ追加）
   let markdown = '';
   if (AI_AGENT_MENTION) {
     markdown = `@${AI_AGENT_MENTION}\n\n`;
