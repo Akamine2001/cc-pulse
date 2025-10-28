@@ -53,7 +53,7 @@ function formatIssue(issue: ReviewIssue): string {
     issue.evidence.forEach((ev, index) => {
       markdown += `${index + 1}. \`${ev.file}:${ev.line}\` - ${ev.description}\n`;
       if (ev.code_snippet) {
-        markdown += `   \`\`\`typescript\n   ${ev.code_snippet}\n   \`\`\`\n`;
+        markdown += `\`\`\`typescript\n${ev.code_snippet}\n\`\`\`\n`;
       }
     });
   }
@@ -84,12 +84,12 @@ export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: str
     issue.evidence.forEach((ev, index) => {
       markdown += `${index + 1}. \`${ev.file}:${ev.line}\` - ${ev.description}\n`;
       if (ev.code_snippet) {
-        markdown += `   \`\`\`typescript\n   ${ev.code_snippet}\n   \`\`\`\n`;
+        markdown += `\`\`\`typescript\n${ev.code_snippet}\n\`\`\`\n`;
       }
     });
   }
 
-  // AIエージェントメンション（環境変数で指定された場合のみ）
+  // AIエージェントメンション（Google Jules連携）
   if (AI_AGENT_MENTION) {
     markdown += `\n\n@${AI_AGENT_MENTION}`;
   }
