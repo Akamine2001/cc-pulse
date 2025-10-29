@@ -1,17 +1,16 @@
 #!/bin/bash
 #
-# GitHub CLI (gh) Installation Script for macOS
+# GitHub CLI (gh) Installation Script for Linux
 #
-# This script installs GitHub CLI (gh) on macOS using Homebrew.
-# If Homebrew is not installed, it will be installed first.
+# This script installs GitHub CLI (gh) on Linux (Ubuntu/Debian).
 #
 # Usage:
 #   bash scripts/install-gh.sh
 #
 # Prerequisites:
-#   - macOS (10.15 or later)
+#   - Ubuntu/Debian Linux
 #   - Internet connection
-#   - Administrator privileges (for Homebrew installation)
+#   - sudo privileges
 #
 
 set -e  # Exit on error
@@ -54,64 +53,41 @@ error_exit() {
     exit 1
 }
 
-# Check if running on macOS
-check_macos() {
+# Check if running on Linux
+check_linux() {
     log_step "Checking Operating System"
 
-    if [[ "$(uname)" != "Darwin" ]]; then
-        error_exit "This script is designed for macOS only. Detected: $(uname)"
+    if [[ "$(uname)" != "Linux" ]]; then
+        error_exit "This script is designed for Linux only. Detected: $(uname)"
     fi
 
-    MACOS_VERSION=$(sw_vers -productVersion)
-    log_success "Running on macOS $MACOS_VERSION"
+    if [[ ! -f /etc/os-release ]]; then
+        error_exit "Cannot detect OS. /etc/os-release not found."
+    fi
+
+    . /etc/os-release
+    log_success "Running on $NAME $VERSION"
 }
 
-# Install Homebrew if not present
-install_homebrew() {
-    log_step "Step 1: Checking Homebrew"
+# Check prerequisites
+check_prerequisites() {
+    log_step "Step 1: Checking Prerequisites"
 
-    if command -v brew &> /dev/null; then
-        BREW_VERSION=$(brew --version | head -n 1)
-        log_success "Homebrew is already installed: $BREW_VERSION"
-
-        # Update Homebrew
-        log_info "Updating Homebrew..."
-        brew update
-        log_success "Homebrew updated"
-        return
-    fi
-
-    log_info "Homebrew not found. Installing..."
-    log_warn "You may be prompted for your password (administrator privileges required)"
-    echo ""
-
-    # Install Homebrew
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-    # Detect architecture and add Homebrew to PATH
-    if [[ "$(uname -m)" == "arm64" ]]; then
-        # Apple Silicon
-        BREW_PATH="/opt/homebrew/bin/brew"
-        if [[ -f "$BREW_PATH" ]]; then
-            eval "$($BREW_PATH shellenv)"
-            log_info "Added Homebrew to PATH (Apple Silicon)"
-        fi
+    # Check curl
+    if command -v curl &> /dev/null; then
+        log_success "curl is installed"
     else
-        # Intel
-        BREW_PATH="/usr/local/bin/brew"
-        if [[ -f "$BREW_PATH" ]]; then
-            eval "$($BREW_PATH shellenv)"
-            log_info "Added Homebrew to PATH (Intel)"
-        fi
+        error_exit "curl is not installed. Please install it first: sudo apt-get install curl"
     fi
 
-    # Verify installation
-    if command -v brew &> /dev/null; then
-        BREW_VERSION=$(brew --version | head -n 1)
-        log_success "Homebrew installed successfully: $BREW_VERSION"
+    # Check sudo
+    if ! sudo -n true 2>/dev/null; then
+        log_warn "sudo privileges required. You may be prompted for your password."
     else
-        error_exit "Homebrew installation failed. Please install manually: https://brew.sh"
+        log_success "sudo privileges confirmed"
     fi
+
+    log_success "All prerequisites are met"
 }
 
 # Install GitHub CLI
@@ -124,15 +100,27 @@ install_gh() {
 
         # Upgrade gh if a newer version is available
         log_info "Checking for updates..."
-        brew upgrade gh || log_info "GitHub CLI is up to date"
+        sudo apt-get update &> /dev/null
+        sudo apt-get install --only-upgrade gh -y &> /dev/null || log_info "GitHub CLI is up to date"
 
         GH_VERSION=$(gh --version | head -n 1)
         log_success "Current version: $GH_VERSION"
         return
     fi
 
-    log_info "Installing GitHub CLI via Homebrew..."
-    brew install gh
+    log_info "Adding GitHub CLI repository..."
+
+    # Add GitHub CLI repository
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null
+    sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+
+    log_success "Repository added"
+
+    log_info "Installing GitHub CLI..."
+    sudo apt-get update
+    sudo apt-get install gh -y
 
     # Verify installation
     if command -v gh &> /dev/null; then
@@ -189,10 +177,10 @@ show_completion() {
 
 # Main function
 main() {
-    log_step "GitHub CLI Installation for macOS"
+    log_step "GitHub CLI Installation for Linux"
 
-    check_macos
-    install_homebrew
+    check_linux
+    check_prerequisites
     install_gh
     check_auth
     show_completion
