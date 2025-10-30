@@ -2,10 +2,15 @@
   "permissions": {
     "allow": [
       "Read",
-      "Bash(gh:*)",
-      "Bash(gh api:*)",
+      "Bash(gh :*)",
+      "Bash(gh api :*)",
+      "Bash(gh issue :*)",
+      "Bash(gh pr :*)",
+      "Bash(gh repo :*)",
+      "Bash(gh run :*)",
+      "Bash(gh workflow :*)",
       "mcp__sequential-thinking",
-      "mcp__serena", 
+      "mcp__serena",
       "WebFetch(domain:cli.github.com)",
       "WebFetch(domain:archive.ubuntu.com)",
       "WebFetch(domain:security.ubuntu.com)",
