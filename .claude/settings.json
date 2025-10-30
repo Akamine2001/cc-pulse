@@ -9,7 +9,8 @@
       "WebFetch(domain:cli.github.com)",
       "WebFetch(domain:archive.ubuntu.com)",
       "WebFetch(domain:security.ubuntu.com)",
-      "WebFetch(domain:ppa.launchpadcontent.net)"
+      "WebFetch(domain:ppa.launchpadcontent.net)",
+      "WebFetch(domain:release-assets.githubusercontent.com)"
     ]
   },
   "enableAllProjectMcpServers": true,
