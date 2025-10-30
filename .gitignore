@@ -52,7 +52,6 @@ tools/pr-review/mcp/.venv/
 .DS_Store
 
 # Claude
-.mcp.json
 !.claude/
 .claude/*
 !.claude/settings.json
