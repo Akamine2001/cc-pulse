@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Read"
+      "Read",
+      "WebFetch(domain:cli.github.com)",
+      "WebFetch(domain:archive.ubuntu.com)",
+      "WebFetch(domain:security.ubuntu.com)",
+      "WebFetch(domain:ppa.launchpadcontent.net)",
+      "WebFetch(domain:www.anthropic.com)"
     ]
   }
 }
