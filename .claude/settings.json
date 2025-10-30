@@ -1,12 +1,19 @@
 {
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
   "permissions": {
     "allow": [
-      "Read",
+      "Bash",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
       "WebFetch(domain:cli.github.com)",
+      "WebFetch(domain:objects.githubusercontent.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:archive.ubuntu.com)",
       "WebFetch(domain:security.ubuntu.com)",
-      "WebFetch(domain:ppa.launchpadcontent.net)",
-      "WebFetch(domain:www.anthropic.com)"
+      "WebFetch(domain:ppa.launchpadcontent.net)"
     ]
   }
 }
