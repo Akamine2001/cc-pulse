@@ -2,8 +2,8 @@
   "permissions": {
     "allow": [
       "Read",
-      "Bash(gh:*)",
-      "Bash(gh api:*)",
+      "Bash(gh :*)",
+      "Bash(gh api :*)",
       "mcp__sequential-thinking",
       "mcp__serena",
       "WebFetch(domain:www.anthropic.com)",
