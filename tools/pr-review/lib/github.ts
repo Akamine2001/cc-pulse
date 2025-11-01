@@ -6,7 +6,7 @@
 
 import { existsSync } from 'fs';
 import type { Octokit } from 'octokit';
-import { BOT_SIGNATURE } from '../shared/constants';
+import { BOT_SIGNATURE } from '../../shared/constants';
 import type { ReviewResult } from '../shared/schemas';
 import { DiffParser } from './parsers';
 import { formatIssueAsInlineComment } from '../shared/formatter';
