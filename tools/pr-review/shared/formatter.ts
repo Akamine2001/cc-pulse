@@ -1,5 +1,5 @@
 import type { ReviewResult, ReviewIssue, ReviewSeverity } from './schemas';
-import { BOT_SIGNATURE, AI_AGENT_MENTION } from './constants';
+import { BOT_SIGNATURE, AI_AGENT_MENTION } from '../../shared/constants';
 
 /**
  * 重要度別の絵文字を取得

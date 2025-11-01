@@ -324,6 +324,49 @@ CREATE TABLE articles (
 4. Frontend updates button state
 ```
 
+## Quality Checks
+
+コードを変更した後、必ず以下のチェックを実行してください。
+
+### Type Check and Linting
+
+```bash
+# TypeScript型チェック + ESLint
+bun run lint
+```
+
+**エラーが出た場合：**
+- 型エラーを修正する
+- `any`型の使用を避ける
+- インポートエラーを確認する
+
+### Build Verification
+
+```bash
+# macOS用ビルド（開発用）
+bun run build:arm64
+
+# または、.app確認
+sudo rm -rf /Applications/cc-pulse.app
+bash scripts/build-release.sh
+/Applications/cc-pulse.app/Contents/MacOS/cc-pulse --version
+```
+
+**ビルドが失敗した場合：**
+- コンパイルエラーのメッセージを確認
+- 型定義が正しいか確認
+- インポートパスが正しいか確認
+
+### 推奨ワークフロー
+
+コード変更後は、以下の順序で確認：
+
+1. **型チェック**: `bun run lint` で型エラーがないか確認
+2. **動作確認**: `bun run dev <command>` で動作テスト
+3. **ビルド確認**: `bun run build:arm64` で配布用ビルドが通るか確認
+
+**重要：** PRを作成する前に、必ず `bun run lint` を実行してください。型エラーがあると、本番環境（GitHub Actions）で実行時エラーが発生します。
+
 ## Testing
 
 ### Manual Testing with Sample Data

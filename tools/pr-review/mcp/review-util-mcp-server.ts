@@ -21,7 +21,7 @@ import { existsSync } from 'fs';
 import { Octokit } from 'octokit';
 import { PRClient } from '../../shared/github/pr-client';
 import { ThreadResolver } from '../../shared/github/thread-resolver';
-import { BOT_SIGNATURE, AI_AGENT_MENTION } from '../shared/constants';
+import { BOT_SIGNATURE, AI_AGENT_MENTION } from '../../shared/constants';
 
 // Import schemas from shared
 import { ReviewIssueSchema, ReviewStatsSchema, type ReviewComment } from '../shared/schemas';
