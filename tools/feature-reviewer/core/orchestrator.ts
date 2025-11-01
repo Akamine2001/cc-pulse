@@ -241,14 +241,15 @@ export class FeatureReviewOrchestrator {
     console.log('📝 Saving parent issue to prompt file...');
     const { dirname, join } = await import('path');
     const { fileURLToPath } = await import('url');
-    const { mkdir } = await import('fs/promises');
 
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
     const promptsDir = join(__dirname, '../prompts');
     const promptPath = join(promptsDir, `issue-${issue.number}.md`);
 
-    await mkdir(promptsDir, { recursive: true });
+    // Bun APIとの一貫性を保つため、spawnでmkdirを実行
+    const proc = spawn(['mkdir', '-p', promptsDir]);
+    await proc.exited;
 
     const content = `# Issue #${issue.number}: ${issue.title}\n\n${issue.body}`;
     await Bun.write(promptPath, content);
