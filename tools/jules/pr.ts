@@ -25,6 +25,10 @@ interface GraphQLResponse {
             }>;
           };
         }>;
+        pageInfo: {
+          hasNextPage: boolean;
+          endCursor: string | null;
+        };
       };
     };
   };
@@ -71,40 +75,54 @@ async function main() {
           prNumber
         );
 
-        const response: GraphQLResponse = await octokit.graphql(
-          `
-          query($owner: String!, $repo: String!, $prNumber: Int!) {
-            repository(owner: $owner, name: $repo) {
-              pullRequest(number: $prNumber) {
-                reviewThreads(first: 100) {
-                  nodes {
-                    isResolved
-                    comments(first: 100) {
-                      nodes {
-                        databaseId
+        const unresolvedCommentIds = new Set<number>();
+        let hasNextPage = true;
+        let cursor: string | null = null;
+
+        while (hasNextPage) {
+          const response: GraphQLResponse = await octokit.graphql(
+            `
+            query($owner: String!, $repo: String!, $prNumber: Int!, $cursor: String) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $prNumber) {
+                  reviewThreads(first: 100, after: $cursor) {
+                    nodes {
+                      isResolved
+                      comments(first: 100) {
+                        nodes {
+                          databaseId
+                        }
                       }
+                    }
+                    pageInfo {
+                      hasNextPage
+                      endCursor
                     }
                   }
                 }
               }
             }
-          }
-        `,
-          {
-            owner: GITHUB_OWNER,
-            repo: GITHUB_REPO,
-            prNumber,
-          }
-        );
+          `,
+            {
+              owner: GITHUB_OWNER,
+              repo: GITHUB_REPO,
+              prNumber,
+              cursor,
+            }
+          );
 
-        const unresolvedCommentIds = new Set<number>();
-        response.repository.pullRequest.reviewThreads.nodes.forEach((thread) => {
-          if (!thread.isResolved) {
-            thread.comments.nodes.forEach((comment) => {
-              unresolvedCommentIds.add(comment.databaseId);
-            });
-          }
-        });
+          const reviewThreads = response.repository.pullRequest.reviewThreads;
+          reviewThreads.nodes.forEach((thread) => {
+            if (!thread.isResolved) {
+              thread.comments.nodes.forEach((comment) => {
+                unresolvedCommentIds.add(comment.databaseId);
+              });
+            }
+          });
+
+          hasNextPage = reviewThreads.pageInfo.hasNextPage;
+          cursor = reviewThreads.pageInfo.endCursor;
+        }
 
         const julesComments = allComments
           .filter(
