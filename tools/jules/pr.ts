@@ -3,7 +3,7 @@ import { Octokit } from 'octokit';
 import { Command } from 'commander';
 import { PRClient } from '../../shared/github/pr-client';
 import { GITHUB_OWNER, GITHUB_REPO } from '../../shared/constants';
-import { AI_AGENT_MENTION } from '../../pr-review/shared/constants';
+import { AI_AGENT_MENTION } from '../pr-review/shared/constants';
 
 interface ReviewComment {
   id: number;
