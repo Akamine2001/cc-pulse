@@ -8,16 +8,6 @@
  * - get_comments_for_file: Get existing review comments for a specific file
  */
 
-// ========== DEBUG LOGGING START ==========
-console.error('[MCP DEBUG] ========================================');
-console.error('[MCP DEBUG] review-util MCP server starting...');
-console.error('[MCP DEBUG] Process ID:', process.pid);
-console.error('[MCP DEBUG] Node/Bun version:', process.version);
-console.error('[MCP DEBUG] Working directory:', process.cwd());
-console.error('[MCP DEBUG] execPath:', process.execPath);
-console.error('[MCP DEBUG] ========================================');
-// ========== DEBUG LOGGING END ==========
-
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -35,8 +25,6 @@ import { BOT_SIGNATURE, AI_AGENT_MENTION } from '../shared/constants';
 
 // Import schemas from shared
 import { ReviewIssueSchema, ReviewStatsSchema, type ReviewComment } from '../shared/schemas';
-
-console.error('[MCP DEBUG] ✅ All imports successful');
 
 // Global storage for existing comments (indexed by file_path)
 const commentsByFile = new Map<string, ReviewComment[]>();
@@ -72,13 +60,10 @@ type SubmitReviewInput = z.infer<typeof SubmitReviewInputSchema>;
  * Reads from path specified in EXISTING_COMMENTS_PATH environment variable
  */
 async function initializeComments() {
-  console.error('[MCP DEBUG] initializeComments() called');
   const filePath = process.env.EXISTING_COMMENTS_PATH;
-  console.error('[MCP DEBUG] EXISTING_COMMENTS_PATH:', filePath);
 
   if (!filePath || !existsSync(filePath)) {
     console.error('[MCP] No existing comments file found');
-    console.error('[MCP DEBUG] File does not exist or path not provided');
     return;
   }
 
@@ -93,10 +78,8 @@ async function initializeComments() {
     }
 
     console.error(`[MCP] Loaded ${comments.length} existing comments from ${filePath}`);
-    console.error('[MCP DEBUG] ✅ initializeComments() completed successfully');
   } catch (error) {
     console.error('[MCP] Failed to load existing comments:', error);
-    console.error('[MCP DEBUG] ❌ initializeComments() failed:', error);
   }
 }
 
@@ -104,15 +87,6 @@ async function initializeComments() {
  * Initialize GitHub clients from environment variables
  */
 function initializeGitHubClients() {
-  console.error('[MCP DEBUG] initializeGitHubClients() called');
-  console.error('[MCP DEBUG] Environment variables:');
-  console.error('[MCP DEBUG]   GITHUB_TOKEN:', process.env.GITHUB_TOKEN ? 'SET' : 'MISSING');
-  console.error('[MCP DEBUG]   GITHUB_OWNER:', process.env.GITHUB_OWNER);
-  console.error('[MCP DEBUG]   GITHUB_REPO:', process.env.GITHUB_REPO);
-  console.error('[MCP DEBUG]   PR_NUMBER:', process.env.PR_NUMBER);
-  console.error('[MCP DEBUG]   HEAD_SHA:', process.env.HEAD_SHA?.substring(0, 7));
-  console.error('[MCP DEBUG]   LOCAL_MODE:', process.env.LOCAL_MODE);
-
   const token = process.env.GITHUB_TOKEN;
   owner = process.env.GITHUB_OWNER || '';
   repo = process.env.GITHUB_REPO || '';
@@ -128,13 +102,11 @@ function initializeGitHubClients() {
 
   if (isLocalMode) {
     console.error('[MCP] Running in LOCAL_MODE - GitHub posting disabled');
-    console.error('[MCP DEBUG] ✅ initializeGitHubClients() completed (LOCAL_MODE)');
     return;
   }
 
   if (!token || !owner || !repo || !prNumberStr) {
     console.error('[MCP] Missing required environment variables for GitHub API');
-    console.error('[MCP DEBUG] ❌ Missing required env vars');
     return;
   }
   octokit = new Octokit({ auth: token });
@@ -142,7 +114,6 @@ function initializeGitHubClients() {
   threadResolver = new ThreadResolver(octokit);
 
   console.error('[MCP] GitHub clients initialized');
-  console.error('[MCP DEBUG] ✅ initializeGitHubClients() completed successfully');
 }
 
 // Create MCP server
@@ -548,37 +519,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Run server
 async function main() {
-  try {
-    console.error('[MCP DEBUG] main() function started');
+  // Initialize existing comments from JSON file
+  await initializeComments();
 
-    // Initialize existing comments from JSON file
-    console.error('[MCP DEBUG] Calling initializeComments()...');
-    await initializeComments();
+  // Initialize GitHub clients
+  initializeGitHubClients();
 
-    // Initialize GitHub clients
-    console.error('[MCP DEBUG] Calling initializeGitHubClients()...');
-    initializeGitHubClients();
-
-    console.error('[MCP DEBUG] Creating StdioServerTransport...');
-    const transport = new StdioServerTransport();
-
-    console.error('[MCP DEBUG] Connecting server to transport...');
-    await server.connect(transport);
-
-    console.error('[MCP DEBUG] ✅ Server connected successfully!');
-    console.error('[MCP DEBUG] review-util MCP server is ready to accept requests');
-  } catch (error) {
-    console.error('[MCP DEBUG] ❌ main() function failed with error:');
-    console.error('[MCP DEBUG] Error type:', error?.constructor?.name);
-    console.error('[MCP DEBUG] Error message:', error instanceof Error ? error.message : String(error));
-    console.error('[MCP DEBUG] Error stack:', error instanceof Error ? error.stack : 'N/A');
-    throw error;
-  }
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
 }
 
-console.error('[MCP DEBUG] Calling main()...');
-main().catch((error) => {
-  console.error('[MCP DEBUG] ❌ Unhandled error in main():');
-  console.error('[MCP DEBUG] Error:', error);
-  process.exit(1);
-});
+main().catch(console.error);
