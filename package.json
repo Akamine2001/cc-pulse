@@ -25,7 +25,9 @@
     "review:local": "bash tools/pr-review/local-review.sh",
     "feature-review:local": "bash tools/feature-reviewer/local-feature.sh",
     "test": "bun test",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "pr:get-comments": "bun run tools/jules/pr.ts get-comments",
+    "pr:reply": "bun run tools/jules/pr.ts reply"
   },
   "keywords": [
     "cli",

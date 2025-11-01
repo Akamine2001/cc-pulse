@@ -409,3 +409,90 @@ cd mcp && uv run python generate_sample_data.py
 - **scripts/setup-jules.sh**: Full setup automation
 - **mcp/generate_sample_data.py**: Sample data generator
 - **Jules docs**: https://jules.google/docs
+
+## Jules Tools
+
+Google JulesがPRのレビューコメントに対応するためのツール群です。
+
+### 環境変数設定
+
+Julesの環境変数に以下を設定してください：
+
+```bash
+export JULES_GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+```
+
+### コマンド
+
+#### 1. インラインコメント取得
+
+PRの`@jules`メンションを含むunresolvedインラインコメントを取得します。
+
+```bash
+bun run pr:get-comments --pr <PR番号>
+```
+
+**出力例**:
+```json
+[
+  {
+    "comment_id": 123456,
+    "file_path": "src/commands/setup.ts",
+    "line_range": {"start": 42, "end": 42},
+    "body": "@jules\n\nこの部分のエラーハンドリングが不足しています..."
+  }
+]
+```
+
+#### 2. コメント返信
+
+特定のインラインコメントに返信を投稿します。
+
+```bash
+bun run pr:reply --pr <PR番号> --comment-id <コメントID> --body "修正内容"
+```
+
+**複数行の返信**:
+```bash
+bun run pr:reply --pr 123 --comment-id 456 --body "修正しました。
+
+詳細：
+- エラーハンドリングを追加
+- テストケースを追加"
+```
+
+### 使用例：PRレビューコメントへの対応
+
+ユーザーから「@julesとメンションされているPRコメントを確認して、修正や返信を行ってください」と指示された場合：
+
+1. **コメント取得**
+   ```bash
+   bun run pr:get-comments --pr 123
+   ```
+
+2. **各コメントを確認**し、以下のいずれかを実施：
+   - **修正が必要な場合**: コードを修正 → コミット → push
+   - **質問・確認が必要な場合**: `bun run pr:reply`で返信
+
+3. **修正後の返信例**:
+   ```bash
+   bun run pr:reply --pr 123 --comment-id 456 --body "Fixed in commit
+abc123def"
+   ```
+4. **質問への返信例**:
+   ```bash
+   bun run pr:reply --pr 123 --comment-id 789 --body
+"この実装は既存のパターンに従っています。詳細は src/core/agent.ts
+を参照してください。"
+   ```
+### ワークフロー
+
+```
+1. PRが作成される
+2. cc-pulse Auto-
+Reviewがレビュー実施（`@jules`メンション付きでコメント投稿）
+3. ユーザーがJulesに「`@jules`コメントを処理して」と指示
+4. Jules: bun run pr:get-comments --pr <番号>
+5. Jules: コメント内容を確認し、修正またはpr:replyで返信
+6. Jules: 修正をコミット&push（または返信で完了）
+```
