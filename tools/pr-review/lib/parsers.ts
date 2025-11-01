@@ -6,7 +6,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import type { Octokit } from 'octokit';
-import { BOT_SIGNATURE } from '../shared/constants';
+import { BOT_SIGNATURE } from '../../shared/constants';
 import type { ReviewComment } from '../shared/schemas';
 
 // ============================================================================
