@@ -6,6 +6,7 @@
 
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { getClaudeCodeExecutablePath } from '../../../src/utils/paths';
+import { sanitizeSensitiveData } from './sanitize';
 
 /**
  * stdio形式のMCPサーバー設定
@@ -185,7 +186,7 @@ export class ClaudeAgent {
           allowedTools: mergedAllowedTools,
           stderr: (data: string) => {
             stderrOutput += data;
-            console.error(`[STDERR] ${data}`);
+            console.error(`[STDERR] ${sanitizeSensitiveData(data)}`);
           }
         }
       });
@@ -232,9 +233,9 @@ export class ClaudeAgent {
 
     } catch (error: any) {
       console.error('❌ Claude Agent execution failed');
-      console.error('   Error:', error.message);
-      console.error('   Stack:', error.stack);
-      console.error('   STDERR:', stderrOutput);
+      console.error('   Error:', sanitizeSensitiveData(error.message));
+      console.error('   Stack:', sanitizeSensitiveData(error.stack));
+      console.error('   STDERR:', sanitizeSensitiveData(stderrOutput));
       throw error;
     }
   }
