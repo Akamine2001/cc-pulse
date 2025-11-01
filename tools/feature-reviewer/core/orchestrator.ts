@@ -5,8 +5,10 @@
  */
 
 import type { Octokit } from 'octokit';
-import { IssueClient } from '../../shared/github/issue-client';
+import { spawn } from 'bun';
+import { IssueClient, type Issue } from '../../shared/github/issue-client';
 import { IssueAnalyzer } from './analyzer';
+import { JulesClient } from '../lib/jules-client';
 import { convertToSubIssueMarkdown } from '../lib/markdown-converter';
 
 export class FeatureReviewOrchestrator {
@@ -19,6 +21,43 @@ export class FeatureReviewOrchestrator {
     private issueNumber: number
   ) {
     this.issueClient = new IssueClient(octokit, owner, repo);
+  }
+
+  /**
+   * Julesセッションを起動
+   */
+  private async invokeJulesSession(
+    issue: Issue,
+    subIssueNumber: number
+  ): Promise<{ sessionId: string; url: string }> {
+    console.log('');
+    console.log('🤖 Invoking Jules AI for auto-implementation...');
+
+    try {
+      // プロンプトをファイルに保存
+      const prompt = await this.savePromptToFile(issue);
+
+      // デフォルトブランチを取得
+      const startingBranch = await this.getDefaultBranch();
+
+      // Jules API呼び出し
+      const julesClient = new JulesClient();
+      const session = await julesClient.createSession(
+        prompt,
+        this.owner,
+        this.repo,
+        startingBranch
+      );
+
+      console.log('✅ Jules invocation successful');
+      return session;
+    } catch (error) {
+      console.error('❌ Jules invocation failed:', error);
+      // サブIssueにエラーコメントを投稿
+      await this.postJulesErrorComment(subIssueNumber, error);
+      // 失敗してもメインフローは継続させるため、空のURLを返す
+      return { sessionId: '', url: '' };
+    }
   }
 
   /**
@@ -92,12 +131,15 @@ export class FeatureReviewOrchestrator {
 
         console.log(`✅ Sub-issue created: #${subIssue.number}`);
         console.log(`   URL: ${subIssue.html_url}`);
-        console.log('');
 
-        // ====== Phase 4: 成功コメント投稿 ======
+        // ====== 【NEW】Phase 4: Jules API呼び出し ======
+        // ローカルモードでない場合のみJules APIを呼び出す
+        const julesSession = await this.invokeJulesSession(issue, subIssue.number);
+
+        // ====== Phase 5: 成功コメント投稿 ======
         console.log('💬 Posting success comment to parent issue...');
 
-        await this.postSuccessComment(subIssue.number);
+        await this.postSuccessComment(subIssue.number, julesSession.url);
 
         console.log('✅ Success comment posted');
         console.log('');
@@ -135,9 +177,11 @@ export class FeatureReviewOrchestrator {
   /**
    * 成功コメントを投稿
    */
-  private async postSuccessComment(subIssueNumber: number): Promise<void> {
+  private async postSuccessComment(subIssueNumber: number, julesSessionUrl: string): Promise<void> {
     const template = await this.loadTemplate('success-comment.md');
-    const comment = template.replace(/\{\{SUB_ISSUE_NUMBER\}\}/g, String(subIssueNumber));
+    const comment = template
+      .replace(/\{\{SUB_ISSUE_NUMBER\}\}/g, String(subIssueNumber))
+      .replace(/\{\{JULES_SESSION_URL\}\}/g, julesSessionUrl || 'N/A');
     await this.issueClient.postComment(this.issueNumber, comment);
   }
 
@@ -163,5 +207,66 @@ export class FeatureReviewOrchestrator {
     const templatePath = join(__dirname, '../templates', filename);
 
     return await Bun.file(templatePath).text();
+  }
+
+  /**
+   * デフォルトブランチを取得
+   */
+  private async getDefaultBranch(): Promise<string> {
+    console.log('🌿 Getting default branch...');
+    const proc = spawn(['gh', 'repo', 'view', `${this.owner}/${this.repo}`, '--json', 'defaultBranchRef', '--jq', '.defaultBranchRef.name'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+
+    if (exitCode !== 0) {
+      console.error(`❌ gh command failed with exit code ${exitCode}`);
+      console.error('   Stderr:', stderr);
+      throw new Error(`Failed to get default branch: ${stderr}`);
+    }
+
+    const branch = stdout.trim();
+    console.log(`✅ Default branch: ${branch}`);
+    return branch;
+  }
+
+  /**
+   * 親Issueの本文をプロンプトファイルとして保存
+   */
+  private async savePromptToFile(issue: Issue): Promise<string> {
+    console.log('📝 Saving parent issue to prompt file...');
+    const { dirname, join } = await import('path');
+    const { fileURLToPath } = await import('url');
+
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const promptsDir = join(__dirname, '../prompts');
+    const promptPath = join(promptsDir, `issue-${issue.number}.md`);
+
+    // Bun APIとの一貫性を保つため、spawnでmkdirを実行
+    const proc = spawn(['mkdir', '-p', promptsDir]);
+    await proc.exited;
+
+    const content = `# Issue #${issue.number}: ${issue.title}\n\n${issue.body}`;
+    await Bun.write(promptPath, content);
+
+    console.log(`✅ Prompt file saved to: ${promptPath}`);
+    return content;
+  }
+
+  /**
+   * Jules APIエラーをサブIssueにコメント
+   */
+  private async postJulesErrorComment(subIssueNumber: number, error: unknown): Promise<void> {
+    console.log(`💬 Posting Jules error comment to sub-issue #${subIssueNumber}...`);
+    const template = await this.loadTemplate('jules-error-comment.md');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const comment = template.replace(/\{\{ERROR_MESSAGE\}\}/g, errorMessage);
+    await this.issueClient.postComment(subIssueNumber, comment);
+    console.log('✅ Jules error comment posted.');
   }
 }
