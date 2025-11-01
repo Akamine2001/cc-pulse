@@ -4,17 +4,15 @@
  * Issue分析からサブIssue作成までのメインフロー制御
  */
 
-import type { Octokit, RestEndpointMethodTypes } from 'octokit';
+import type { Octokit } from 'octokit';
 import { IssueClient } from '../../shared/github/issue-client';
 import { IssueAnalyzer } from './analyzer';
+import { JulesApiClient } from './jules-client';
 import { convertToSubIssueMarkdown } from '../lib/markdown-converter';
-import { JulesClient } from '../lib/jules-client';
-import { execSync } from 'child_process';
-
-type Issue = RestEndpointMethodTypes['issues']['get']['response']['data'];
 
 export class FeatureReviewOrchestrator {
   private issueClient: IssueClient;
+  private julesClient: JulesApiClient;
 
   constructor(
     private octokit: Octokit,
@@ -23,6 +21,11 @@ export class FeatureReviewOrchestrator {
     private issueNumber: number
   ) {
     this.issueClient = new IssueClient(octokit, owner, repo);
+    this.julesClient = new JulesApiClient(
+      process.env.JULES_API_KEY!,
+      owner,
+      repo
+    );
   }
 
   /**
@@ -73,7 +76,7 @@ export class FeatureReviewOrchestrator {
 
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = dirname(__filename);
-        const outputDir = join(__dirname, '../output');
+        const outputDir = join(__dirname, '../output');  // ../../output → ../output に修正
         const outputPath = join(outputDir, `issue-${issue.number}-guidelines.md`);
 
         // output/ディレクトリを作成
@@ -91,27 +94,45 @@ export class FeatureReviewOrchestrator {
       } else {
         // 通常モード: GitHubに作成
         console.log('📝 Creating sub-issue on GitHub...');
-
         const subIssue = await this.createSubIssue(
           subIssueTitle,
           subIssueMarkdown
         );
-
         console.log(`✅ Sub-issue created: #${subIssue.number}`);
         console.log(`   URL: ${subIssue.html_url}`);
         console.log('');
 
-        // 【NEW】Phase 4: Jules API呼び出し
-        const julesSessionUrl = await this.invokeJulesSession(
-          issue,
-          subIssue.number
-        );
+        // ====== Phase 4: Jules API呼び出し ======
+        let julesSessionUrl: string | undefined;
+        try {
+          // プロンプトをmdファイルとして保存
+          const prompt = `# Issue #${issue.number}: ${issue.title}\n\n${issue.body}`;
+          const promptPath = await this.savePromptToFile(
+            `issue-${issue.number}.md`,
+            prompt
+          );
+          console.log(`✅ Prompt saved to: ${promptPath}`);
 
-        // Phase 5: 成功コメント投稿（既存を拡張）
+          // Jules API呼び出し
+          const julesResponse =
+            await this.julesClient.startAutomatedImplementation(
+              prompt,
+              issue.number,
+              subIssue.number
+            );
+          julesSessionUrl = julesResponse.url;
+        } catch (julesError) {
+          console.error('❌ Jules API call failed:', julesError);
+          // サブIssueにエラーコメントを投稿
+          await this.postJulesErrorComment(subIssue.number, julesError);
+          // 親Issueにもエラーを通知
+          await this.postErrorComment(julesError);
+          throw julesError;
+        }
+
+        // ====== Phase 5: 成功コメント投稿 ======
         console.log('💬 Posting success comment to parent issue...');
-
         await this.postSuccessComment(subIssue.number, julesSessionUrl);
-
         console.log('✅ Success comment posted');
         console.log('');
         console.log('🎉 Feature Reviewer completed successfully!');
@@ -121,8 +142,11 @@ export class FeatureReviewOrchestrator {
 
       // エラーコメント投稿
       try {
-        await this.postErrorComment(error);
-        console.log('✅ Error comment posted to parent issue');
+        // Jules APIエラーでない場合のみ親Issueに投稿
+        if (!(error instanceof Error && error.message.startsWith('Jules API'))) {
+          await this.postErrorComment(error);
+          console.log('✅ Error comment posted to parent issue');
+        }
       } catch (commentError) {
         console.error('❌ Failed to post error comment:', commentError);
       }
@@ -135,7 +159,7 @@ export class FeatureReviewOrchestrator {
    * 親Issueを取得
    */
   private async fetchIssue() {
-    return (await this.issueClient.getIssue(this.issueNumber)) as Issue;
+    return await this.issueClient.getIssue(this.issueNumber);
   }
 
   /**
@@ -146,99 +170,23 @@ export class FeatureReviewOrchestrator {
   }
 
   /**
-   * Phase 4: Jules APIを呼び出し
-   */
-  private async invokeJulesSession(
-    issue: Issue,
-    subIssueNumber: number
-  ): Promise<string> {
-    console.log('');
-    console.log('🤖 Invoking Jules AI for auto-implementation...');
-
-    try {
-      // 1. プロンプトMD保存
-      const prompt = await this.savePromptToFile(issue);
-
-      // 2. デフォルトブランチ取得
-      const defaultBranch = this.getDefaultBranch();
-
-      // 3. Jules API呼び出し
-      const julesClient = new JulesClient();
-      const { url } = await julesClient.createSession(
-        prompt,
-        this.owner,
-        this.repo,
-        defaultBranch
-      );
-      return url;
-    } catch (error) {
-      console.error('❌ Jules API invocation failed:', error);
-      await this.postJulesErrorComment(subIssueNumber, error);
-      // 上位のcatchブロックで処理を継続させるため、再スロー
-      throw error;
-    }
-  }
-
-  /**
-   * 親Issueの本文をプロンプトとしてMDファイルに保存
-   */
-  private async savePromptToFile(issue: Issue): Promise<string> {
-    const { dirname, join } = await import('path');
-    const { fileURLToPath } = await import('url');
-    const { mkdir } = await import('fs/promises');
-
-    const promptBody = `# Issue #${issue.number}: ${issue.title}\n\n${issue.body}`;
-
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const promptsDir = join(__dirname, '../prompts');
-    const outputPath = join(promptsDir, `issue-${issue.number}.md`);
-
-    await mkdir(promptsDir, { recursive: true });
-    await Bun.write(outputPath, promptBody);
-
-    console.log(`   ✅ Prompt saved to: ${outputPath}`);
-    return promptBody;
-  }
-
-  /**
-   * デフォルトブランチを動的取得
-   */
-  private getDefaultBranch(): string {
-    console.log('   🔧 Getting default branch...');
-    const command = `gh repo view ${this.owner}/${this.repo} --json defaultBranchRef --jq '.defaultBranchRef.name'`;
-    const defaultBranch = execSync(command).toString().trim();
-    console.log(`   ✅ Default branch: ${defaultBranch}`);
-    return defaultBranch;
-  }
-
-  /**
-   * Jules APIエラーコメントをサブIssueに投稿
-   */
-  private async postJulesErrorComment(
-    subIssueNumber: number,
-    error: unknown
-  ): Promise<void> {
-    console.log('   💬 Posting Jules error comment to sub-issue...');
-    const template = await this.loadTemplate('jules-error-comment.md');
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const comment = template.replace(/\{\{ERROR_MESSAGE\}\}/g, errorMessage);
-    // サブIssueにコメント
-    await this.issueClient.postComment(subIssueNumber, comment);
-    console.log('   ✅ Jules error comment posted.');
-  }
-
-  /**
    * 成功コメントを投稿
    */
   private async postSuccessComment(
     subIssueNumber: number,
-    julesSessionUrl: string
+    julesSessionUrl?: string
   ): Promise<void> {
     const template = await this.loadTemplate('success-comment.md');
-    const comment = template
-      .replace(/\{\{SUB_ISSUE_NUMBER\}\}/g, String(subIssueNumber))
-      .replace(/\{\{JULES_SESSION_URL\}\}/g, julesSessionUrl);
+    let comment = template.replace(
+      /\{\{SUB_ISSUE_NUMBER\}\}/g,
+      String(subIssueNumber)
+    );
+    if (julesSessionUrl) {
+      comment = comment.replace(
+        /\{\{JULES_SESSION_URL\}\}/g,
+        julesSessionUrl
+      );
+    }
     await this.issueClient.postComment(this.issueNumber, comment);
   }
 
@@ -250,6 +198,41 @@ export class FeatureReviewOrchestrator {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const comment = template.replace(/\{\{ERROR_MESSAGE\}\}/g, errorMessage);
     await this.issueClient.postComment(this.issueNumber, comment);
+  }
+
+  /**
+   * Jules APIエラーコメントをサブIssueに投稿
+   */
+  private async postJulesErrorComment(
+    subIssueNumber: number,
+    error: unknown
+  ): Promise<void> {
+    const template = await this.loadTemplate('jules-error-comment.md');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const comment = template.replace(/\{\{ERROR_MESSAGE\}\}/g, errorMessage);
+    await this.issueClient.postComment(subIssueNumber, comment);
+  }
+
+  /**
+   * プロンプトをファイルに保存
+   */
+  private async savePromptToFile(
+    filename: string,
+    content: string
+  ): Promise<string> {
+    const { dirname, join } = await import('path');
+    const { fileURLToPath } = await import('url');
+    const { mkdir } = await import('fs/promises');
+
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const outputDir = join(__dirname, '../prompts');
+    const outputPath = join(outputDir, filename);
+
+    await mkdir(outputDir, { recursive: true });
+    await Bun.write(outputPath, content);
+
+    return outputPath;
   }
 
   /**
