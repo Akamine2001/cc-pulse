@@ -2,8 +2,33 @@
 import { Octokit } from 'octokit';
 import { Command } from 'commander';
 import { PRClient } from '../../shared/github/pr-client';
-import { ThreadResolver } from '../../shared/github/thread-resolver';
 import { GITHUB_OWNER, GITHUB_REPO } from '../../shared/constants';
+import { AI_AGENT_MENTION } from '../../../tools/pr-review/shared/constants';
+
+interface ReviewComment {
+  id: number;
+  body: string;
+  path: string;
+  start_line: number;
+  line: number;
+}
+
+interface GraphQLResponse {
+  repository: {
+    pullRequest: {
+      reviewThreads: {
+        nodes: Array<{
+          isResolved: boolean;
+          comments: {
+            nodes: Array<{
+              databaseId: number;
+            }>;
+          };
+        }>;
+      };
+    };
+  };
+}
 
 // Function to get all review comments for a pull request
 async function getAllReviewComments(
@@ -11,7 +36,7 @@ async function getAllReviewComments(
   owner: string,
   repo: string,
   prNumber: number
-) {
+): Promise<ReviewComment[]> {
   return await octokit.paginate(octokit.rest.pulls.listReviewComments, {
     owner,
     repo,
@@ -30,12 +55,11 @@ async function main() {
 
   const octokit = new Octokit({ auth: token });
   const prClient = new PRClient(octokit, GITHUB_OWNER, GITHUB_REPO);
-  const threadResolver = new ThreadResolver(octokit);
   const program = new Command();
 
   program
     .command('get-comments')
-    .description('Get unresolved inline comments that mention @jules.')
+    .description(`Get unresolved inline comments that mention @${AI_AGENT_MENTION}.`)
     .requiredOption('--pr <number>', 'Pull request number')
     .action(async (options) => {
       const prNumber = parseInt(options.pr, 10);
@@ -47,7 +71,7 @@ async function main() {
           prNumber
         );
 
-        const response: any = await octokit.graphql(
+        const response: GraphQLResponse = await octokit.graphql(
           `
           query($owner: String!, $repo: String!, $prNumber: Int!) {
             repository(owner: $owner, name: $repo) {
@@ -74,9 +98,9 @@ async function main() {
         );
 
         const unresolvedCommentIds = new Set<number>();
-        response.repository.pullRequest.reviewThreads.nodes.forEach((thread: any) => {
+        response.repository.pullRequest.reviewThreads.nodes.forEach((thread) => {
           if (!thread.isResolved) {
-            thread.comments.nodes.forEach((comment: any) => {
+            thread.comments.nodes.forEach((comment) => {
               unresolvedCommentIds.add(comment.databaseId);
             });
           }
@@ -84,10 +108,11 @@ async function main() {
 
         const julesComments = allComments
           .filter(
-            (c: any) =>
-              c.body.includes('@jules') && unresolvedCommentIds.has(c.id)
+            (c) =>
+              c.body.includes(`@${AI_AGENT_MENTION}`) &&
+              unresolvedCommentIds.has(c.id)
           )
-          .map((c: any) => ({
+          .map((c) => ({
             comment_id: c.id,
             file_path: c.path,
             line_range: {
@@ -99,7 +124,7 @@ async function main() {
 
         if (julesComments.length === 0) {
           console.log('[]')
-          console.error('No unresolved @jules comments found');
+          console.error(`No unresolved @${AI_AGENT_MENTION} comments found`);
         } else {
           console.log(JSON.stringify(julesComments, null, 2));
         }
