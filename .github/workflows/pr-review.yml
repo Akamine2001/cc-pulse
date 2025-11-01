@@ -64,6 +64,30 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # デバッグ: MCP Server起動テスト
+      - name: Debug MCP Server Startup
+        run: |
+          echo "========================================="
+          echo "Testing bun command availability..."
+          echo "========================================="
+          which bun
+          bun --version
+          echo ""
+          echo "========================================="
+          echo "PATH environment variable:"
+          echo "========================================="
+          echo "$PATH"
+          echo ""
+          echo "========================================="
+          echo "Testing review-util MCP server startup (timeout 5s)..."
+          echo "========================================="
+          timeout 5s bun run tools/pr-review/mcp/review-util-mcp-server.ts 2>&1 || echo "Exit code: $?"
+          echo ""
+          echo "========================================="
+          echo "Testing direct bun execution..."
+          echo "========================================="
+          timeout 5s bun tools/pr-review/mcp/review-util-mcp-server.ts 2>&1 || echo "Exit code: $?"
+
       # TypeScriptレビュースクリプト実行
       - name: Run Review Script
         env:
