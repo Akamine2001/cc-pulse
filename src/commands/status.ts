@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import { Scheduler, SCHEDULE_PATTERN_LABELS } from '../core/scheduler';
 import { getConfig } from '../core/config';
 import { existsSync } from 'fs';
-import { getNewsDataDir } from '../utils/paths';
+import { getNewsDataDir, getLogsDir, getDatabasePath } from '../utils/paths';
 import { readdir } from 'fs/promises';
 
 /**
@@ -83,6 +83,12 @@ export async function statusCommand(): Promise<void> {
   console.log(chalk.gray(`  記事数: ${config.count}`));
   console.log(chalk.gray(`  言語: ${config.language}`));
   console.log(chalk.gray(`  ポート: ${config.port}`));
+
+  // File paths
+  console.log(chalk.bold('\nConfiguration:'));
+  console.log(chalk.gray(`  📁 Database: ${getDatabasePath()}`));
+  console.log(chalk.gray(`  📁 News Data: ${getNewsDataDir()}`));
+  console.log(chalk.gray(`  📁 Logs: ${getLogsDir()}`));
 
   console.log();
 }
