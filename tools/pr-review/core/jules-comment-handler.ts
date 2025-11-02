@@ -159,8 +159,12 @@ export class JulesCommentHandler {
     }
 
     // @julesメンションを含む未解決コメントのみフィルタ
+    // ただし、Jules自身のコメントは除外
     return allComments.filter(
-      (c) => c.body.includes(`@${AI_AGENT_MENTION}`) && !c.isResolved
+      (c) =>
+        c.body.includes(`@${AI_AGENT_MENTION}`) &&
+        !c.isResolved &&
+        !c.user.startsWith('google-labs-jules')  // Julesからのコメントを除外
     );
   }
 

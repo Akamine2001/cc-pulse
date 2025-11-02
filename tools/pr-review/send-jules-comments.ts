@@ -1,17 +1,17 @@
 #!/usr/bin/env bun
 
 /**
- * Jules Comment Handler - Entry Point
+ * Send Jules Comments - Entry Point
  *
- * PRコメントから@julesメンションを検出し、Julesセッションに送信
- * GitHub Actionsから実行されることを想定
+ * @julesコメントをJulesセッションに送信（Phase 3のみ）
+ * コメント投稿時に軽量実行するための専用スクリプト
  */
 
 import { Octokit } from 'octokit';
 import { JulesCommentHandler } from './core/jules-comment-handler';
 
 /**
- * 環境変数の検証
+ * 環境変数の検証（最小限）
  */
 function validateEnv() {
   const required = {
@@ -41,6 +41,9 @@ function validateEnv() {
  * メイン処理
  */
 async function main() {
+  console.log('🚀 Send Jules Comments (Phase 3 Only)');
+  console.log('');
+
   // 環境変数の検証
   const env = validateEnv();
 
