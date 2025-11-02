@@ -1,0 +1,93 @@
+name: Close Sub-Issues on PR Merge
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  close-sub-issues:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      # PR本文から親Issue番号を抽出
+      - name: Extract Parent Issue Number
+        id: extract-parent
+        run: |
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body --jq '.body')
+          echo "PR Body: $PR_BODY"
+
+          # "Closes #123" / "Fixes #456" / "Resolves #789" などから番号を抽出
+          PARENT_ISSUE=$(echo "$PR_BODY" | grep -oiP '(?:Closes|Fixes|Resolves)\s+#\K\d+' | head -1)
+
+          if [ -z "$PARENT_ISSUE" ]; then
+            echo "⚠️ 親Issueが見つかりませんでした"
+            echo "parent_issue=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "✅ 親Issue: #$PARENT_ISSUE"
+          echo "parent_issue=$PARENT_ISSUE" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 親IssueのコメントからサブIssue番号を抽出
+      - name: Extract Sub-Issue Number
+        if: steps.extract-parent.outputs.parent_issue != ''
+        id: extract-sub
+        run: |
+          PARENT_ISSUE=${{ steps.extract-parent.outputs.parent_issue }}
+
+          # 親Issueのコメントを取得
+          COMMENTS=$(gh issue view $PARENT_ISSUE --json comments --jq '.comments[].body')
+          echo "Comments: $COMMENTS"
+
+          # "実装時は以下のIssueを参照してください：\n- #123" からサブIssue番号を抽出
+          SUB_ISSUE=$(echo "$COMMENTS" | grep -A 1 '実装時は以下のIssueを参照してください' | grep -oP '#\K\d+' | head -1)
+
+          if [ -z "$SUB_ISSUE" ]; then
+            echo "⚠️ サブIssueが見つかりませんでした"
+            echo "sub_issue=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "✅ サブIssue: #$SUB_ISSUE"
+          echo "sub_issue=$SUB_ISSUE" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # サブIssueにコメントを投稿してクローズ
+      - name: Close Sub-Issue with Comment
+        if: steps.extract-sub.outputs.sub_issue != ''
+        run: |
+          SUB_ISSUE=${{ steps.extract-sub.outputs.sub_issue }}
+          PARENT_ISSUE=${{ steps.extract-parent.outputs.parent_issue }}
+          PR_NUMBER=${{ github.event.pull_request.number }}
+
+          # クローズコメントを投稿
+          gh issue comment $SUB_ISSUE --body "✅ PR #${PR_NUMBER} がマージされたため、このサブIssueをクローズします。
+
+親Issue: #${PARENT_ISSUE}
+マージされたPR: #${PR_NUMBER}"
+
+          # サブIssueをクローズ
+          gh issue close $SUB_ISSUE
+
+          echo "✅ サブIssue #$SUB_ISSUE をクローズしました"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 完了メッセージ
+      - name: Summary
+        if: steps.extract-sub.outputs.sub_issue != ''
+        run: |
+          echo "### ✅ サブIssue自動クローズ完了" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 親Issue: #${{ steps.extract-parent.outputs.parent_issue }}" >> $GITHUB_STEP_SUMMARY
+          echo "- サブIssue: #${{ steps.extract-sub.outputs.sub_issue }}" >> $GITHUB_STEP_SUMMARY
+          echo "- マージされたPR: #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY

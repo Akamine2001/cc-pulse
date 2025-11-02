@@ -39,7 +39,8 @@ async function main() {
     repo,
     parseInt(env.PR_NUMBER),
     env.PR_AUTHOR || owner,
-    env.GITHUB_REPOSITORY
+    env.GITHUB_REPOSITORY,
+    env.JULES_API_KEY
   );
 
   // レビュープロセス実行
