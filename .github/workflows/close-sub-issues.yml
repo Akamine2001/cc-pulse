@@ -19,7 +19,7 @@ jobs:
       - name: Extract Parent Issue Number
         id: extract-parent
         run: |
-          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body --jq '.body')
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json body --jq '.body')
           echo "PR Body: $PR_BODY"
 
           # "Closes #123" / "Fixes #456" / "Resolves #789" などから番号を抽出
@@ -44,7 +44,7 @@ jobs:
           PARENT_ISSUE=${{ steps.extract-parent.outputs.parent_issue }}
 
           # 親Issueのコメントを取得
-          COMMENTS=$(gh issue view $PARENT_ISSUE --json comments --jq '.comments[].body')
+          COMMENTS=$(gh issue view $PARENT_ISSUE --repo ${{ github.repository }} --json comments --jq '.comments[].body')
           echo "Comments: $COMMENTS"
 
           # "実装時は以下のIssueを参照してください：\n- #123" からサブIssue番号を抽出
@@ -70,7 +70,7 @@ jobs:
           PR_NUMBER=${{ github.event.pull_request.number }}
 
           # クローズコメントを投稿
-          gh issue comment $SUB_ISSUE --body "$(cat <<EOF
+          gh issue comment $SUB_ISSUE --repo ${{ github.repository }} --body "$(cat <<EOF
           ✅ PR #${PR_NUMBER} がマージされたため、このサブIssueをクローズします。
 
           親Issue: #${PARENT_ISSUE}
@@ -79,7 +79,7 @@ jobs:
           )"
 
           # サブIssueをクローズ
-          gh issue close $SUB_ISSUE
+          gh issue close $SUB_ISSUE --repo ${{ github.repository }}
 
           echo "✅ サブIssue #$SUB_ISSUE をクローズしました"
         env:
