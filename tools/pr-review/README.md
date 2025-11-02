@@ -162,32 +162,32 @@ PRコメントに`@jules`メンションが含まれる場合、自動的にJule
    ↓
 3. PRが作成される（親Issueを参照）
    ↓
-4. ユーザーがPRに @jules コメント投稿
+4. PR Reviewが自動実行（PR作成・更新時）:
+   Phase 1: 前回Conversation処理
+   Phase 2: 新規レビュー実施
+   Phase 3: @julesコメント送信（統合！）
+     - 親IssueからJulesセッション情報を取得
+     - 未解決の@julesコメントを収集
+     - Julesセッションに送信（sendMessage API）
    ↓
-5. Jules Comment Handlerが自動実行:
-   - 親IssueからJulesセッション情報を取得
-   - 未解決の@julesコメントを収集
-   - Julesセッションに送信（sendMessage API）
-   ↓
-6. Julesが修正を実装してPRにpush
+5. Julesが修正を実装してPRにpush
 ```
 
 **トリガー**:
-- PRへのコメント投稿時（issue_comment）
-- PRレビューコメント投稿時（pull_request_review_comment）
-- `@jules`メンションを含む場合のみ
+- PR作成時（pull_request: opened）
+- PR更新時（pull_request: synchronize）
+- ドラフト解除時（pull_request: ready_for_review）
 
 **対象コメント**:
 - ✅ 未解決（resolve済みでない）コメントのみ
-- ✅ Issueコメント（PRコメント）
-- ✅ Pull Request Review Comment（インラインコメント）
+- ✅ `@jules`メンションを含むコメント
+- ✅ Jules自身のコメントは除外（無限ループ防止）
+- ✅ Issueコメント + Pull Request Review Comment
 
 **メリット**:
-- github-actions[bot]からのコメントでもJulesに届く
-- 手動で`@jules`メンションを追加可能
-- 複数のコメントを一度に送信可能
-
-**ワークフロー**: `.github/workflows/jules-comment.yml`
+- ✅ 1つのワークフローで完結（シンプル）
+- ✅ レビュー実施とJulesへのフィードバックが同時実行
+- ✅ github-actions[bot]からのコメントもJulesに届く
 
 ## レビュープロセス（Phase 2.0）
 
@@ -245,6 +245,33 @@ PRコメントに`@jules`メンションが含まれる場合、自動的にJule
 5. 新しい問題のみコメント投稿（全ての優先度）
 6. サマリーコメント投稿
 ```
+
+### Phase 3: @julesコメント送信（Jules連携）
+
+レビュー完了後、未解決の`@jules`コメントをJulesセッションに送信します。
+
+```
+1. 親IssueからJulesセッション情報を取得
+   - GuidelinesExtractor.extractJulesSessionFromPR()
+   ↓
+2. PRコメントを収集:
+   - Issueコメント（PRコメント）
+   - Pull Request Review Comment（インラインコメント）
+   ↓
+3. フィルタリング:
+   - ✅ @julesメンションを含む
+   - ✅ 未解決（resolve済みでない）
+   - ✅ Jules自身のコメントは除外
+   ↓
+4. Julesセッションに送信（sendMessage API）
+   - 各コメントを整形して送信
+   - エラー時も処理継続（non-critical）
+```
+
+**注意:**
+- JULES_API_KEYが設定されていない場合はスキップ
+- 親Issueにセッション情報がない場合もスキップ
+- エラーが発生してもレビュー全体は失敗しない
 
 ## レビュー観点のカスタマイズ
 

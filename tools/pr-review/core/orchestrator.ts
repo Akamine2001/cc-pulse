@@ -9,6 +9,7 @@ import type { Octokit } from 'octokit';
 import { unlink } from 'fs/promises';
 import { PRReviewer } from './reviewer';
 import { CommentResolver } from './comment-resolver';
+import { JulesCommentHandler } from './jules-comment-handler';
 import { collectExistingConversations } from '../lib/parsers';
 import { readPRDiff, readReviewGuidelines, saveDiffByFiles, deleteTempDiffFiles } from '../lib/files';
 import { PRClient } from '../../shared/github/pr-client';
@@ -23,7 +24,8 @@ export class ReviewOrchestrator {
     private repo: string,
     private prNumber: number,
     private prAuthor: string,
-    private repositoryName: string
+    private repositoryName: string,
+    private julesApiKey?: string
   ) {}
 
   /**
@@ -165,6 +167,29 @@ export class ReviewOrchestrator {
 
       console.log('');
       console.log('✅ Review process completed successfully!');
+
+      // ====== Phase 3: Julesコメント送信 ======
+      if (this.julesApiKey) {
+        console.log('');
+        console.log('🤖 Sending @jules comments to Jules session...');
+
+        try {
+          const julesHandler = new JulesCommentHandler(
+            this.octokit,
+            this.owner,
+            this.repo,
+            this.prNumber,
+            this.julesApiKey
+          );
+          await julesHandler.execute();
+        } catch (julesError) {
+          // Julesコメント送信エラーはレビュー全体を失敗させない
+          console.warn('⚠️  Jules comment sending failed (non-critical):', julesError);
+        }
+      } else {
+        console.log('');
+        console.log('ℹ️  Skipping Jules comment sending (JULES_API_KEY not set)');
+      }
 
       // 一時ファイルのクリーンアップ
       try {

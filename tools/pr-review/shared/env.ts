@@ -8,7 +8,8 @@ const EnvSchema = z.object({
   GITHUB_TOKEN: z.string().min(1, 'GITHUB_TOKEN is required'),
   PR_NUMBER: z.string().regex(/^\d+$/, 'PR_NUMBER must be a number'),
   GITHUB_REPOSITORY: z.string().regex(/^[^/]+\/[^/]+$/, 'GITHUB_REPOSITORY must be in owner/repo format'),
-  PR_AUTHOR: z.string().optional()
+  PR_AUTHOR: z.string().optional(),
+  JULES_API_KEY: z.string().optional()
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -23,7 +24,8 @@ export function validateEnv(): Env {
       GITHUB_TOKEN: process.env.GITHUB_TOKEN,
       PR_NUMBER: process.env.PR_NUMBER,
       GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY,
-      PR_AUTHOR: process.env.PR_AUTHOR
+      PR_AUTHOR: process.env.PR_AUTHOR,
+      JULES_API_KEY: process.env.JULES_API_KEY
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
