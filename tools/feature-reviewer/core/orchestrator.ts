@@ -132,10 +132,15 @@ ${issue.body}
 ---
 
 **重要な指示:**
-実装完了後にPRを作成する際は、PR本文の冒頭に必ず以下を含めてください：
+実装完了後にPRを作成する際は、必ず以下のPRテンプレートに従ってPR本文を作成してください：
+
+**PRテンプレートの場所:** \`.github/pull_request_template.md\`
+
+**特に重要：**
+PR本文の「関連Issue」セクションに必ず以下を含めてください：
 \`Closes #${issue.number}\`
 
-これにより親Issueとの紐付けが確実になります。`;
+これにより親Issueとの紐付けが確実になり、自動レビューシステムが正しく動作します。`;
           const promptPath = await this.savePromptToFile(
             `issue-${issue.number}.md`,
             prompt
