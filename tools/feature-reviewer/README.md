@@ -122,7 +122,8 @@ tools/
     │
     ├── core/                       # コア処理
     │   ├── orchestrator.ts         # メインフロー制御
-    │   └── analyzer.ts             # Issue・コード分析
+    │   ├── analyzer.ts             # Issue・コード分析
+    │   └── jules-client.ts         # Jules API連携
     │
     ├── mcp/                        # MCPサーバー
     │   └── feature-review-mcp-server.ts  # レビュー観点出力MCP
@@ -151,6 +152,7 @@ tools/
 
 - **Claude Agent SDK**: Issue分析・観点生成
 - **Serena MCP**: コードベース探索（最大7階層まで）
+- **Google Jules API**: 自動実装セッション作成
 - **Zod**: スキーマバリデーション
 - **共通クライアント**: `tools/shared/` のIssueClient, ClaudeAgentを使用
 - **Bun**: TypeScript実行環境
@@ -213,8 +215,14 @@ await agent.query({
 5. サブIssue作成（GitHub API）
    - HTMLコメントブロックで分離
    ↓
-6. 親Issueにコメント投稿
+6. Julesセッション作成（Jules API）
+   - Source取得
+   - Session作成（automationMode: AUTO_CREATE_PR）
+   - セッション情報を保存
+   ↓
+7. 親Issueにコメント投稿
    成功: "✅ レビュー・テスト観点を作成しました #XXX"
+        + Julesセッション情報（HTMLコメント形式）
    失敗: "⚠️ 作成に失敗しました" + エラー内容
 ```
 
@@ -254,6 +262,70 @@ await agent.query({
 | `GITHUB_TOKEN` | ◯ | GitHub Personal Access Token（Issues: write権限） |
 | `ISSUE_NUMBER` | ◯ | Issue番号（GitHub Actionsが自動設定） |
 | `GITHUB_REPOSITORY` | ◯ | リポジトリ（owner/repo形式、GitHub Actionsが自動設定） |
+| `JULES_API_KEY` | ◯ | Google Jules API Key（セッション作成用） |
+| `LOCAL_MODE` | △ | `true`でローカルモード（GitHub作成なし） |
+
+## Google Jules API 統合
+
+Feature Reviewerは、サブIssue作成後に自動的にGoogle Julesセッションを作成します。
+
+### Jules API連携フロー
+
+```
+1. サブIssue作成
+   ↓
+2. Jules Source取得（GET /v1alpha/sources）
+   - リポジトリに紐づくSourceを検索
+   ↓
+3. Jules Session作成（POST /v1alpha/sessions）
+   - 親Issueのタイトルと本文をプロンプトとして送信
+   - automationMode: AUTO_CREATE_PR
+   ↓
+4. セッション情報を親Issueコメントに保存
+   - Session Name: sessions/{sessionId}
+   - Session URL: https://jules.google.com/session/{sessionId}
+   - HTMLコメント形式で埋め込み
+```
+
+### JulesApiClient
+
+**主要メソッド:**
+
+```typescript
+import { JulesApiClient } from './core/jules-client';
+
+const client = new JulesApiClient(apiKey, owner, repo);
+
+// Source取得
+const sourceName = await client.getSource();
+// → "sources/github/owner/repo"
+
+// Session作成
+const session = await client.startAutomatedImplementation(
+  prompt,
+  issueNumber,
+  subIssueNumber
+);
+// → { name, url, id, automationMode }
+
+// メッセージ送信
+await client.sendMessageToSession(sessionUrl, message);
+```
+
+### 認証
+
+- **ヘッダー**: `X-Goog-Api-Key`
+- **API Key取得**: [Jules Web UI](https://jules.google.com) の Settings から作成
+- **リポジトリ登録**: 事前にJules Web UIでリポジトリを登録する必要があります
+
+### エラーハンドリング
+
+Jules API呼び出しに失敗した場合：
+1. サブIssueにエラーコメント投稿
+2. 親Issueにもエラー通知
+3. エラーをthrow（処理中断）
+
+エラーでもサブIssueは作成されており、手動でJulesセッションを作成可能です。
 
 ## 今後の拡張予定
 

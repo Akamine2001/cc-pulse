@@ -7,10 +7,23 @@
 import type { Octokit } from 'octokit';
 import { IssueClient } from '../../shared/github/issue-client';
 import { IssueAnalyzer } from './analyzer';
+import { JulesApiClient } from './jules-client';
 import { convertToSubIssueMarkdown } from '../lib/markdown-converter';
+
+/**
+ * Jules APIエラーを示すカスタムエラークラス
+ * 重複したエラーコメント投稿を防ぐために使用
+ */
+class JulesApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'JulesApiError';
+  }
+}
 
 export class FeatureReviewOrchestrator {
   private issueClient: IssueClient;
+  private julesClient: JulesApiClient;
 
   constructor(
     private octokit: Octokit,
@@ -19,6 +32,18 @@ export class FeatureReviewOrchestrator {
     private issueNumber: number
   ) {
     this.issueClient = new IssueClient(octokit, owner, repo);
+    
+    // JULES_API_KEY環境変数のバリデーション
+    const apiKey = process.env.JULES_API_KEY;
+    if (!apiKey) {
+      throw new Error('JULES_API_KEY environment variable is required');
+    }
+    
+    this.julesClient = new JulesApiClient(
+      apiKey,
+      owner,
+      repo
+    );
   }
 
   /**
@@ -87,18 +112,64 @@ export class FeatureReviewOrchestrator {
       } else {
         // 通常モード: GitHubに作成
         console.log('📝 Creating sub-issue on GitHub...');
-
-        const subIssue = await this.createSubIssue(subIssueTitle, subIssueMarkdown);
-
+        const subIssue = await this.createSubIssue(
+          subIssueTitle,
+          subIssueMarkdown
+        );
         console.log(`✅ Sub-issue created: #${subIssue.number}`);
         console.log(`   URL: ${subIssue.html_url}`);
         console.log('');
 
-        // ====== Phase 4: 成功コメント投稿 ======
+        // ====== Phase 4: Jules API呼び出し ======
+        let julesSessionUrl: string | undefined;
+        let julesSessionName: string | undefined;
+        try {
+          // プロンプトをmdファイルとして保存
+          const prompt = `# Issue #${issue.number}: ${issue.title}
+
+${issue.body}
+
+---
+
+**重要な指示:**
+実装完了後にPRを作成する際は、必ず以下のPRテンプレートに従ってPR本文を作成してください：
+
+**PRテンプレートの場所:** \`.github/pull_request_template.md\`
+
+**特に重要：**
+PR本文の「関連Issue」セクションに必ず以下を含めてください：
+\`Closes #${issue.number}\`
+
+これにより親Issueとの紐付けが確実になり、自動レビューシステムが正しく動作します。`;
+          const promptPath = await this.savePromptToFile(
+            `issue-${issue.number}.md`,
+            prompt
+          );
+          console.log(`✅ Prompt saved to: ${promptPath}`);
+
+          // Jules API呼び出し
+          const julesResponse =
+            await this.julesClient.startAutomatedImplementation(
+              prompt,
+              issue.number,
+              subIssue.number
+            );
+          julesSessionUrl = julesResponse.url;
+          julesSessionName = julesResponse.name;
+        } catch (julesError) {
+          console.error('❌ Jules API call failed:', julesError);
+          // サブIssueにエラーコメントを投稿
+          await this.postJulesErrorComment(subIssue.number, julesError);
+          // 親Issueにもエラーを通知
+          await this.postErrorComment(julesError);
+          // カスタムエラーをthrowして、上位でのエラーコメント重複投稿を防ぐ
+          const errorMessage = julesError instanceof Error ? julesError.message : String(julesError);
+          throw new JulesApiError(errorMessage);
+        }
+
+        // ====== Phase 5: 成功コメント投稿 ======
         console.log('💬 Posting success comment to parent issue...');
-
-        await this.postSuccessComment(subIssue.number);
-
+        await this.postSuccessComment(subIssue.number, julesSessionUrl, julesSessionName);
         console.log('✅ Success comment posted');
         console.log('');
         console.log('🎉 Feature Reviewer completed successfully!');
@@ -108,8 +179,11 @@ export class FeatureReviewOrchestrator {
 
       // エラーコメント投稿
       try {
-        await this.postErrorComment(error);
-        console.log('✅ Error comment posted to parent issue');
+        // Jules APIエラーの場合は既にコメント投稿済みなのでスキップ
+        if (!(error instanceof JulesApiError)) {
+          await this.postErrorComment(error);
+          console.log('✅ Error comment posted to parent issue');
+        }
       } catch (commentError) {
         console.error('❌ Failed to post error comment:', commentError);
       }
@@ -135,9 +209,31 @@ export class FeatureReviewOrchestrator {
   /**
    * 成功コメントを投稿
    */
-  private async postSuccessComment(subIssueNumber: number): Promise<void> {
+  /**
+   * 成功コメントを投稿
+   */
+  private async postSuccessComment(
+    subIssueNumber: number,
+    julesSessionUrl?: string,
+    julesSessionName?: string
+  ): Promise<void> {
     const template = await this.loadTemplate('success-comment.md');
-    const comment = template.replace(/\{\{SUB_ISSUE_NUMBER\}\}/g, String(subIssueNumber));
+    let comment = template.replace(
+      /\{\{SUB_ISSUE_NUMBER\}\}/g,
+      String(subIssueNumber)
+    );
+    if (julesSessionUrl) {
+      comment = comment.replace(
+        /\{\{JULES_SESSION_URL\}\}/g,
+        julesSessionUrl
+      );
+    }
+    if (julesSessionName) {
+      comment = comment.replace(
+        /\{\{JULES_SESSION_NAME\}\}/g,
+        julesSessionName
+      );
+    }
     await this.issueClient.postComment(this.issueNumber, comment);
   }
 
@@ -149,6 +245,41 @@ export class FeatureReviewOrchestrator {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const comment = template.replace(/\{\{ERROR_MESSAGE\}\}/g, errorMessage);
     await this.issueClient.postComment(this.issueNumber, comment);
+  }
+
+  /**
+   * Jules APIエラーコメントをサブIssueに投稿
+   */
+  private async postJulesErrorComment(
+    subIssueNumber: number,
+    error: unknown
+  ): Promise<void> {
+    const template = await this.loadTemplate('jules-error-comment.md');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const comment = template.replace(/\{\{ERROR_MESSAGE\}\}/g, errorMessage);
+    await this.issueClient.postComment(subIssueNumber, comment);
+  }
+
+  /**
+   * プロンプトをファイルに保存
+   */
+  private async savePromptToFile(
+    filename: string,
+    content: string
+  ): Promise<string> {
+    const { dirname, join } = await import('path');
+    const { fileURLToPath } = await import('url');
+    const { mkdir } = await import('fs/promises');
+
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const outputDir = join(__dirname, '../prompts');
+    const outputPath = join(outputDir, filename);
+
+    await mkdir(outputDir, { recursive: true });
+    await Bun.write(outputPath, content);
+
+    return outputPath;
   }
 
   /**

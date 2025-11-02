@@ -13,6 +13,7 @@ cc-pulse用のGitHub Actions自動PRレビューツール（Phase 2.0）
 - **重複指摘の防止**: 既存Conversationを把握して新しい問題のみ指摘
 - **レビュー観点のカスタマイズ**: `review-guidelines.md`で編集可能
 - **全問題のコメント**: 優先度に関わらず全ての問題をコメント
+- **Jules連携**: `@jules`コメントを自動的にJulesセッションに送信
 
 ## アーキテクチャ
 
@@ -29,14 +30,16 @@ tools/
 │       └── thread-resolver.ts        # Thread操作専門
 │
 └── pr-review/
-    ├── index.ts                      # エントリーポイント
+    ├── index.ts                      # エントリーポイント（PR Review）
+    ├── jules-comment.ts              # エントリーポイント（Jules Comment Handler）
     ├── review-guidelines.md          # レビュー観点（編集可能）
     ├── local-review.sh               # ローカル実行スクリプト
     │
     ├── core/                         # コア処理
-    │   ├── orchestrator.ts           # メインフロー制御
+    │   ├── orchestrator.ts           # メインフロー制御（PR Review）
     │   ├── reviewer.ts               # レビュー実行（ClaudeAgent使用）
-    │   └── comment-resolver.ts       # コメント解決（ClaudeAgent使用）
+    │   ├── comment-resolver.ts       # コメント解決（ClaudeAgent使用）
+    │   └── jules-comment-handler.ts  # @julesコメント処理
     │
     ├── lib/                          # 補助機能
     │   ├── github.ts                 # PR Review特有のロジック
@@ -123,11 +126,12 @@ bun run review:pr
 
 | 変数名 | 必須 | 説明 |
 |-------|------|------|
-| `CLAUDE_CODE_OAUTH_TOKEN` | ◯ | Claude Pro/MAX OAuth token |
+| `CLAUDE_CODE_OAUTH_TOKEN` | ◯ | Claude Pro/MAX OAuth token（PR Review用） |
 | `GITHUB_TOKEN` | ◯ | GitHub Personal Access Token |
 | `PR_NUMBER` | ◯ | PR番号 |
 | `GITHUB_REPOSITORY` | ◯ | リポジトリ（owner/repo形式） |
 | `PR_AUTHOR` | △ | PR作成者（メンション用） |
+| `JULES_API_KEY` | ◯ | Google Jules API Key（Jules Comment Handler用） |
 | `LOCAL_MODE` | △ | `true`でローカルモード（mdファイル保存、GitHub投稿なし） |
 
 ### LOCAL_MODEの動作
@@ -144,23 +148,46 @@ bun run review:pr
 
 ### Google Jules連携
 
-このツールは**Google Jules AIエージェント**と連携しており、インラインコメントに`@jules`メンションを自動追加します。
+このツールは**Google Jules API**と連携し、PRコメントを自動的にJulesセッションに送信します。
+
+#### Jules Comment Handler
+
+PRコメントに`@jules`メンションが含まれる場合、自動的にJulesセッションに送信されます。
 
 **動作フロー**:
-1. PRが作成される
-2. cc-pulse Auto-Reviewがコードレビューを実施
-3. インラインコメントに`@jules`メンションを含めて投稿
-4. Google Julesが自動的にコメントを読んで修正を実装
-5. 修正後のコミットをPRにpush
+```
+1. Feature Issue作成
+   ↓
+2. Feature Reviewerがサブissue + Julesセッション作成
+   ↓
+3. PRが作成される（親Issueを参照）
+   ↓
+4. ユーザーがPRに @jules コメント投稿
+   ↓
+5. Jules Comment Handlerが自動実行:
+   - 親IssueからJulesセッション情報を取得
+   - 未解決の@julesコメントを収集
+   - Julesセッションに送信（sendMessage API）
+   ↓
+6. Julesが修正を実装してPRにpush
+```
+
+**トリガー**:
+- PRへのコメント投稿時（issue_comment）
+- PRレビューコメント投稿時（pull_request_review_comment）
+- `@jules`メンションを含む場合のみ
+
+**対象コメント**:
+- ✅ 未解決（resolve済みでない）コメントのみ
+- ✅ Issueコメント（PRコメント）
+- ✅ Pull Request Review Comment（インラインコメント）
 
 **メリット**:
-- PRからコードレビュー、修正まで完全自動化
-- 人間の介入なしで品質向上
-- レビュー→修正のサイクルを高速化
+- github-actions[bot]からのコメントでもJulesに届く
+- 手動で`@jules`メンションを追加可能
+- 複数のコメントを一度に送信可能
 
-**注意**:
-- メンションは**インラインコメントのみ**に追加されます
-- サマリーコメントには追加されません
+**ワークフロー**: `.github/workflows/jules-comment.yml`
 
 ## レビュープロセス（Phase 2.0）
 

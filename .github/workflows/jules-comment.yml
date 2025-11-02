@@ -1,0 +1,56 @@
+name: Jules Comment Handler
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+jobs:
+  send-to-jules:
+    # PRコメントで@julesメンションがある場合のみ実行
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@jules')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # リポジトリのチェックアウト
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Bun環境セットアップ
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # 依存関係インストール
+      - name: Install Dependencies
+        run: |
+          bun install
+
+      # Jules Comment Handler実行
+      - name: Send Comments to Jules
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+        run: |
+          bun run tools/pr-review/jules-comment.ts
+
+      # エラー時のフォールバック
+      - name: Fallback Comment on Error
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.issue.number }} \
+            --body "⚠️ Julesセッションへのコメント送信でエラーが発生しました。ログを確認してください。"

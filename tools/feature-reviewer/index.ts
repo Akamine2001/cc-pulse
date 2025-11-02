@@ -17,7 +17,8 @@ const EnvSchema = z.object({
   CLAUDE_CODE_OAUTH_TOKEN: z.string().min(1, 'CLAUDE_CODE_OAUTH_TOKEN is required'),
   GITHUB_TOKEN: z.string().min(1, 'GITHUB_TOKEN is required'),
   ISSUE_NUMBER: z.string().regex(/^\d+$/, 'ISSUE_NUMBER must be a number'),
-  GITHUB_REPOSITORY: z.string().regex(/^[^/]+\/[^/]+$/, 'GITHUB_REPOSITORY must be in "owner/repo" format')
+  GITHUB_REPOSITORY: z.string().regex(/^[^/]+\/[^/]+$/, 'GITHUB_REPOSITORY must be in "owner/repo" format'),
+  JULES_API_KEY: z.string().min(1, 'JULES_API_KEY is required'),
 });
 
 function validateEnv() {
@@ -25,7 +26,8 @@ function validateEnv() {
     CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN,
     GITHUB_TOKEN: process.env.GITHUB_TOKEN,
     ISSUE_NUMBER: process.env.ISSUE_NUMBER,
-    GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY
+    GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY,
+    JULES_API_KEY: process.env.JULES_API_KEY,
   });
 }
 
