@@ -111,6 +111,15 @@ export function getNewsDataPath(date: string): string {
 }
 
 /**
+ * Get database file path (~/.cc-pulse/articles.db)
+ * Note: This is a legacy path, not XDG compliant
+ */
+export function getDatabasePath(): string {
+  // This path is intentionally not in XDG directories for legacy reasons
+  return join(getHomeDir(), '.cc-pulse', 'articles.db');
+}
+
+/**
  * Get logs directory (~/.local/state/cc-pulse/logs/)
  */
 export function getLogsDir(): string {
