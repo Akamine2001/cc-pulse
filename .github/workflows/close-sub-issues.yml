@@ -70,10 +70,13 @@ jobs:
           PR_NUMBER=${{ github.event.pull_request.number }}
 
           # クローズコメントを投稿
-          gh issue comment $SUB_ISSUE --body "✅ PR #${PR_NUMBER} がマージされたため、このサブIssueをクローズします。
+          gh issue comment $SUB_ISSUE --body "$(cat <<EOF
+          ✅ PR #${PR_NUMBER} がマージされたため、このサブIssueをクローズします。
 
-親Issue: #${PARENT_ISSUE}
-マージされたPR: #${PR_NUMBER}"
+          親Issue: #${PARENT_ISSUE}
+          マージされたPR: #${PR_NUMBER}
+          EOF
+          )"
 
           # サブIssueをクローズ
           gh issue close $SUB_ISSUE
