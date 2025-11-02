@@ -159,12 +159,12 @@ export class JulesCommentHandler {
     }
 
     // @julesメンションを含む未解決コメントのみフィルタ
-    // ただし、Jules自身のコメントは除外
+    // ただし、GitHub Actions Botからのコメントのみに限定
     return allComments.filter(
       (c) =>
         c.body.includes(`@${AI_AGENT_MENTION}`) &&
         !c.isResolved &&
-        !c.user.startsWith('google-labs-jules')  // Julesからのコメントを除外
+        c.user === 'github-actions[bot]'  // GitHub Actions Botからのコメントのみ
     );
   }
 

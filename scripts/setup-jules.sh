@@ -78,6 +78,9 @@ main() {
     # Install uv
     install_uv
 
+    # Install Claude Code CLI
+    install_claude_code_cli
+
     # Setup project
     setup_project
 
@@ -201,6 +204,43 @@ install_uv() {
     else
         error_exit "uv installation failed"
     fi
+}
+
+# Install Claude Code CLI
+install_claude_code_cli() {
+    log_step "Step 3.5: Installing Claude Code CLI"
+
+    if command -v claude &> /dev/null; then
+        CLAUDE_VERSION=$(claude --version 2>&1 | head -1)
+        log_info "Claude Code CLI is already installed: $CLAUDE_VERSION"
+        log_info "Skipping installation..."
+        return
+    fi
+
+    log_info "Installing Claude Code CLI (native binary)..."
+    log_info "This will install to ~/.local/bin/claude"
+    echo ""
+
+    # Install native binary
+    if curl -fsSL https://claude.ai/install.sh | bash; then
+        # Add to PATH for current session
+        export PATH="$HOME/.local/bin:$PATH"
+
+        # Verify installation
+        if command -v claude &> /dev/null; then
+            CLAUDE_VERSION=$(claude --version 2>&1 | head -1)
+            log_success "Claude Code CLI installed: $CLAUDE_VERSION"
+            log_info "Installation location: $(which claude)"
+        else
+            error_exit "Claude Code CLI installation failed (binary not found in PATH)"
+        fi
+    else
+        error_exit "Claude Code CLI installation failed"
+    fi
+
+    echo ""
+    log_info "Note: Add to your shell profile for persistent access:"
+    log_info "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
 }
 
 # Setup project dependencies
@@ -441,9 +481,10 @@ show_completion_message() {
     echo -e "${GREEN}=====================================${NC}"
     echo ""
     echo -e "${CYAN}Environment Summary:${NC}"
-    echo -e "  Bun version:    $(bun --version)"
-    echo -e "  uv version:     $(uv --version | awk '{print $2}')"
-    echo -e "  Python version: $(python3 --version | awk '{print $2}')"
+    echo -e "  Bun version:         $(bun --version)"
+    echo -e "  uv version:          $(uv --version | awk '{print $2}')"
+    echo -e "  Python version:      $(python3 --version | awk '{print $2}')"
+    echo -e "  Claude Code version: $(claude --version 2>&1 | head -1)"
     echo ""
     echo -e "${CYAN}Directory Structure:${NC}"
     echo -e "  Config:   $HOME/.config/cc-pulse/config.yml"
