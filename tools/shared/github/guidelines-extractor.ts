@@ -6,6 +6,15 @@
 
 import type { Octokit } from 'octokit';
 
+/**
+ * サブIssue情報
+ */
+export interface SubIssueInfo {
+  subIssueNumber: number;
+  julesSessionName?: string;
+  julesSessionUrl?: string;
+}
+
 export class GuidelinesExtractor {
   constructor(
     private octokit: Octokit,
@@ -13,6 +22,12 @@ export class GuidelinesExtractor {
     private repo: string
   ) {}
 
+  /**
+   * PRから動的にレビュー観点を抽出
+   *
+   * @param prNumber PR番号
+   * @returns レビュー観点（取得失敗時はnull）
+   */
   /**
    * PRから動的にレビュー観点を抽出
    *
@@ -35,17 +50,20 @@ export class GuidelinesExtractor {
 
       console.log(`  ✅ Found parent issue: #${parentIssueNumber}`);
 
-      // 3. サブIssue番号を取得
-      const subIssueNumber = await this.findSubIssue(parentIssueNumber);
-      if (!subIssueNumber) {
+      // 3. サブIssue情報を取得
+      const subIssueInfo = await this.findSubIssue(parentIssueNumber);
+      if (!subIssueInfo) {
         console.log('ℹ️  No sub-issue found for parent issue');
         return null;
       }
 
-      console.log(`  ✅ Found sub-issue: #${subIssueNumber}`);
+      console.log(`  ✅ Found sub-issue: #${subIssueInfo.subIssueNumber}`);
+      if (subIssueInfo.julesSessionName) {
+        console.log(`  ✅ Found Jules session: ${subIssueInfo.julesSessionName}`);
+      }
 
       // 4. レビュー観点を抽出
-      const guidelines = await this.extractGuidelines(subIssueNumber);
+      const guidelines = await this.extractGuidelines(subIssueInfo.subIssueNumber);
       if (!guidelines) {
         console.log('ℹ️  No review guidelines found in sub-issue');
         return null;
@@ -55,6 +73,47 @@ export class GuidelinesExtractor {
       return guidelines;
     } catch (error) {
       console.warn('⚠️  Failed to extract guidelines from issues:', error);
+      return null;
+    }
+  }
+
+
+  /**
+   * PRからJulesセッション情報を抽出
+   *
+   * @param prNumber PR番号
+   * @returns Julesセッション情報（取得失敗時はnull）
+   */
+  async extractJulesSessionFromPR(prNumber: number): Promise<SubIssueInfo | null> {
+    try {
+      console.log('🔍 Extracting Jules session info from related issues...');
+
+      // 1. PRを取得
+      const pr = await this.getPR(prNumber);
+
+      // 2. 親Issue番号を抽出
+      const parentIssueNumber = await this.extractParentIssueNumber(prNumber, pr.body);
+      if (!parentIssueNumber) {
+        console.log('ℹ️  No parent issue reference found in PR');
+        return null;
+      }
+
+      // 3. サブIssue情報（セッション情報含む）を取得
+      const subIssueInfo = await this.findSubIssue(parentIssueNumber);
+      if (!subIssueInfo) {
+        console.log('ℹ️  No sub-issue found for parent issue');
+        return null;
+      }
+
+      console.log(`  ✅ Found sub-issue: #${subIssueInfo.subIssueNumber}`);
+      if (subIssueInfo.julesSessionName) {
+        console.log(`  ✅ Found Jules session: ${subIssueInfo.julesSessionName}`);
+        console.log(`  ✅ Session URL: ${subIssueInfo.julesSessionUrl}`);
+      }
+
+      return subIssueInfo;
+    } catch (error) {
+      console.warn('⚠️  Failed to extract Jules session info:', error);
       return null;
     }
   }
@@ -131,7 +190,13 @@ export class GuidelinesExtractor {
    * @param parentIssueNumber 親Issue番号
    * @returns サブissue番号（見つからない場合はnull）
    */
-  private async findSubIssue(parentIssueNumber: number): Promise<number | null> {
+  /**
+   * 親Issueのコメントからサブissue情報を取得
+   *
+   * @param parentIssueNumber 親Issue番号
+   * @returns サブissue情報（見つからない場合はnull）
+   */
+  private async findSubIssue(parentIssueNumber: number): Promise<SubIssueInfo | null> {
     const comments = await this.octokit.rest.issues.listComments({
       owner: this.owner,
       repo: this.repo,
@@ -141,13 +206,31 @@ export class GuidelinesExtractor {
 
     // feature-reviewerのコメントパターン:
     // "実装時は以下のIssueを参照してください：\n- #12"
-    const pattern = /実装時は以下のIssueを参照してください：\s*\n\s*-\s*#(\d+)/;
+    const subIssuePattern = /実装時は以下のIssueを参照してください：\s*\n\s*-\s*#(\d+)/;
+    
+    // Julesセッション情報のパターン:
+    // <!-- JULES_SESSION_NAME: sessions/123 -->
+    // <!-- JULES_SESSION_URL: https://jules.google.com/session/123 -->
+    const sessionNamePattern = /<!-- JULES_SESSION_NAME: ([^\s]+) -->/;
+    const sessionUrlPattern = /<!-- JULES_SESSION_URL: ([^\s]+) -->/;
 
     // 最初に見つかったコメントを使用
     for (const comment of comments.data) {
-      const match = pattern.exec(comment.body || '');
-      if (match && match[1]) {
-        return parseInt(match[1]);
+      const body = comment.body || '';
+      const subIssueMatch = subIssuePattern.exec(body);
+      
+      if (subIssueMatch && subIssueMatch[1]) {
+        const subIssueNumber = parseInt(subIssueMatch[1]);
+        
+        // セッション情報も抽出
+        const sessionNameMatch = sessionNamePattern.exec(body);
+        const sessionUrlMatch = sessionUrlPattern.exec(body);
+        
+        return {
+          subIssueNumber,
+          julesSessionName: sessionNameMatch?.[1],
+          julesSessionUrl: sessionUrlMatch?.[1],
+        };
       }
     }
 

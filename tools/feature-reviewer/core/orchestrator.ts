@@ -10,6 +10,17 @@ import { IssueAnalyzer } from './analyzer';
 import { JulesApiClient } from './jules-client';
 import { convertToSubIssueMarkdown } from '../lib/markdown-converter';
 
+/**
+ * Jules APIエラーを示すカスタムエラークラス
+ * 重複したエラーコメント投稿を防ぐために使用
+ */
+class JulesApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'JulesApiError';
+  }
+}
+
 export class FeatureReviewOrchestrator {
   private issueClient: IssueClient;
   private julesClient: JulesApiClient;
@@ -21,8 +32,15 @@ export class FeatureReviewOrchestrator {
     private issueNumber: number
   ) {
     this.issueClient = new IssueClient(octokit, owner, repo);
+    
+    // JULES_API_KEY環境変数のバリデーション
+    const apiKey = process.env.JULES_API_KEY;
+    if (!apiKey) {
+      throw new Error('JULES_API_KEY environment variable is required');
+    }
+    
     this.julesClient = new JulesApiClient(
-      process.env.JULES_API_KEY!,
+      apiKey,
       owner,
       repo
     );
@@ -104,9 +122,20 @@ export class FeatureReviewOrchestrator {
 
         // ====== Phase 4: Jules API呼び出し ======
         let julesSessionUrl: string | undefined;
+        let julesSessionName: string | undefined;
         try {
           // プロンプトをmdファイルとして保存
-          const prompt = `# Issue #${issue.number}: ${issue.title}\n\n${issue.body}`;
+          const prompt = `# Issue #${issue.number}: ${issue.title}
+
+${issue.body}
+
+---
+
+**重要な指示:**
+実装完了後にPRを作成する際は、PR本文の冒頭に必ず以下を含めてください：
+\`Closes #${issue.number}\`
+
+これにより親Issueとの紐付けが確実になります。`;
           const promptPath = await this.savePromptToFile(
             `issue-${issue.number}.md`,
             prompt
@@ -121,18 +150,21 @@ export class FeatureReviewOrchestrator {
               subIssue.number
             );
           julesSessionUrl = julesResponse.url;
+          julesSessionName = julesResponse.name;
         } catch (julesError) {
           console.error('❌ Jules API call failed:', julesError);
           // サブIssueにエラーコメントを投稿
           await this.postJulesErrorComment(subIssue.number, julesError);
           // 親Issueにもエラーを通知
           await this.postErrorComment(julesError);
-          throw julesError;
+          // カスタムエラーをthrowして、上位でのエラーコメント重複投稿を防ぐ
+          const errorMessage = julesError instanceof Error ? julesError.message : String(julesError);
+          throw new JulesApiError(errorMessage);
         }
 
         // ====== Phase 5: 成功コメント投稿 ======
         console.log('💬 Posting success comment to parent issue...');
-        await this.postSuccessComment(subIssue.number, julesSessionUrl);
+        await this.postSuccessComment(subIssue.number, julesSessionUrl, julesSessionName);
         console.log('✅ Success comment posted');
         console.log('');
         console.log('🎉 Feature Reviewer completed successfully!');
@@ -142,8 +174,8 @@ export class FeatureReviewOrchestrator {
 
       // エラーコメント投稿
       try {
-        // Jules APIエラーでない場合のみ親Issueに投稿
-        if (!(error instanceof Error && error.message.startsWith('Jules API'))) {
+        // Jules APIエラーの場合は既にコメント投稿済みなのでスキップ
+        if (!(error instanceof JulesApiError)) {
           await this.postErrorComment(error);
           console.log('✅ Error comment posted to parent issue');
         }
@@ -172,9 +204,13 @@ export class FeatureReviewOrchestrator {
   /**
    * 成功コメントを投稿
    */
+  /**
+   * 成功コメントを投稿
+   */
   private async postSuccessComment(
     subIssueNumber: number,
-    julesSessionUrl?: string
+    julesSessionUrl?: string,
+    julesSessionName?: string
   ): Promise<void> {
     const template = await this.loadTemplate('success-comment.md');
     let comment = template.replace(
@@ -185,6 +221,12 @@ export class FeatureReviewOrchestrator {
       comment = comment.replace(
         /\{\{JULES_SESSION_URL\}\}/g,
         julesSessionUrl
+      );
+    }
+    if (julesSessionName) {
+      comment = comment.replace(
+        /\{\{JULES_SESSION_NAME\}\}/g,
+        julesSessionName
       );
     }
     await this.issueClient.postComment(this.issueNumber, comment);

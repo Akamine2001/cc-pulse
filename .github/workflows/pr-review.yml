@@ -68,7 +68,7 @@ jobs:
       - name: Run Review Script
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
@@ -79,7 +79,7 @@ jobs:
       - name: Fallback Comment on Error
         if: failure()
         env:
-          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "⚠️ 自動レビューでエラーが発生しました。ログを確認してください。"
