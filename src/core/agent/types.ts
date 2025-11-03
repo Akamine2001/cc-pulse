@@ -1,5 +1,5 @@
 import type { StdioMcpServer as ClaudeStdioMcpServer } from '../../../tools/shared/claude/agent';
-import type { DailyNewsData } from '../../schemas/news-schemas';
+import type { ExecutionStats, FinalNewsItem } from '../../schemas/news-schemas';
 
 /**
  * MCPサーバー設定 (tools/shared/claude/agent.ts を参考)
@@ -44,28 +44,76 @@ export interface CapturedNewsData {
 }
 
 /**
- * 集約結果の型
+ * 集約されたニュース出力
+ * mcp__output__output_aggregated_news ツールの出力型
  */
 export interface AggregatedNewsOutput {
-  date: string;
-  news: Array<{
+  date: string;  // YYYY-MM-DD
+  news: Omit<FinalNewsItem, 'id'>[];  // UUIDはまだ付与されていない
+  stats: ExecutionStats;
+}
+
+/**
+ * Claude Agent SDKのストリームメッセージ型
+ */
+export interface StreamMessage {
+  type: 'assistant' | 'user';
+  message?: {
+    role: 'assistant' | 'user';
+    content: ContentBlock[];
+  };
+}
+
+/**
+ * コンテンツブロックの型
+ */
+export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock;
+
+export interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+export interface ToolUseBlock {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: unknown;  // ツールごとに異なるため、使用時に型アサーション
+}
+
+export interface ToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;
+  content?: Array<{ type: 'text'; text: string }>;
+}
+
+/**
+ * mcp__embedding__search_similar の入力型
+ */
+export interface SearchSimilarInput {
+  query_text: string;
+}
+
+/**
+ * mcp__output__output_collected_news の入力型
+ */
+export interface OutputCollectedNewsInput {
+  articles: Array<{
     title: string;
-    summary: string;
-    tags: string[];
+    content: string;
     url: string;
-    original_language: string;
+    language: string;
     source_domain: string;
     fetched_at: string;
-    is_duplicate: boolean;
     thumbnail_url: string | null;
     published_at: string | null;
     site_icon_url: string | null;
   }>;
-  stats: {
-    total_collected: number;
-    unique_articles: number;
-    duplicate_removed: number;
-    iterations: number;
-    duration_ms: number;
-  };
+  total_found: number;
+  keywords_used: string[];
 }
+
+/**
+ * mcp__output__output_aggregated_news の入力型
+ */
+export interface OutputAggregatedNewsInput extends AggregatedNewsOutput {}
