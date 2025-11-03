@@ -110,14 +110,16 @@ export class NewsOrchestrator {
           }
         },
       });
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof AgentExecutionError) {
         throw new NewsCollectionError('Failed during agent execution', {
           originalError: error,
           stderr: error.stderr,
         });
       }
-      throw new NewsCollectionError('An unexpected error occurred while fetching news', {
+      const message =
+        error instanceof Error ? error.message : 'An unexpected error occurred';
+      throw new NewsCollectionError(message, {
         originalError: error,
       });
     }

@@ -56,7 +56,7 @@ export function createOutputToolsServer() {
     'output_duplicate_check',
     'Output duplicate check result with validation. Input: unique_articles (array), duplicate_count, total_checked',
     {
-      unique_articles: z.array(FinalNewsItemSchema),
+      unique_articles: z.array(FinalNewsItemSchema.omit({ id: true })),
       duplicate_count: z.number().nonnegative(),
       total_checked: z.number().nonnegative()
     },
@@ -77,7 +77,7 @@ export function createOutputToolsServer() {
     'Output final aggregated news with validation. Input: date, news (array), stats (object)',
     {
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      news: z.array(FinalNewsItemSchema),
+      news: z.array(FinalNewsItemSchema.omit({ id: true })),
       stats: ExecutionStatsSchema
     },
     async (args) => {
