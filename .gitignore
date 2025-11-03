@@ -70,3 +70,6 @@ docs/*
 !docs/AGENTS.md
 !docs/NOTARIZATION.md
 !docs/RELEASE_PROCESS.md
+
+# Server logs
+server.log

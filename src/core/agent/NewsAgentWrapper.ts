@@ -48,7 +48,6 @@ export class NewsAgentWrapper {
   }): Promise<{ stderr: string }> {
     const { prompt, agents, onToolUse, onText } = options;
 
-    const sdkMcpServers = this.convertMcpServers(this.config.mcpServers || {});
     let stderrOutput = '';
 
     try {
@@ -57,7 +56,7 @@ export class NewsAgentWrapper {
         options: {
           pathToClaudeCodeExecutable: this.claudeCodePath,
           agents,
-          mcpServers: sdkMcpServers,
+          mcpServers: this.config.mcpServers,
           allowedTools: this.config.allowedTools,
           maxTurns: this.config.maxTurns,
           stderr: (data: string) => {
@@ -112,24 +111,4 @@ export class NewsAgentWrapper {
     }
   }
 
-  /**
-   * MCPサーバー設定をSDKが要求する形式に変換する
-   * @param servers StdioMcpServer形式のサーバー設定
-   * @returns SDK形式のサーバー設定
-   * @private
-   */
-  private convertMcpServers(
-    servers: Record<string, StdioMcpServer>
-  ): Record<string, any> {
-    const sdkMcpServers: Record<string, any> = {};
-    for (const [name, server] of Object.entries(servers)) {
-      sdkMcpServers[name] = {
-        type: 'stdio' as const,
-        command: server.command,
-        args: server.args,
-        env: server.env,
-      };
-    }
-    return sdkMcpServers;
-  }
 }
