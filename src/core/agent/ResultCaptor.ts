@@ -28,6 +28,7 @@ export class ResultCaptor {
     this.iterations++;
 
     if (toolName === 'mcp__embedding__search_similar') {
+      // ツール名で分岐しているため、inputの型は確定している
       const typedInput = input as SearchSimilarInput;
       const queryText = typedInput.query_text || '';
       this.similarityChecks.set(toolId, queryText);
@@ -36,6 +37,7 @@ export class ResultCaptor {
     }
 
     if (toolName === 'mcp__output__output_collected_news') {
+      // ツール名で分岐しているため、inputの型は確定している
       const typedInput = input as OutputCollectedNewsInput;
       console.log(
         `\n🚚 [Collected News] ${typedInput.articles.length} articles received.`
@@ -43,6 +45,7 @@ export class ResultCaptor {
     }
 
     if (toolName === 'mcp__output__output_aggregated_news') {
+      // ツール名で分岐しているため、inputの型は確定している
       this.aggregatedOutput = input as OutputAggregatedNewsInput;
     }
   }
