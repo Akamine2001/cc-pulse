@@ -1,6 +1,8 @@
 import type {
   AggregatedNewsOutput,
   CapturedNewsData,
+  OutputAggregatedNewsInput,
+  OutputCollectedNewsInput,
   SearchSimilarInput,
 } from './types';
 
@@ -33,8 +35,15 @@ export class ResultCaptor {
       console.log(`   Query: ${queryText.substring(0, 80)}...`);
     }
 
+    if (toolName === 'mcp__output__output_collected_news') {
+      const typedInput = input as OutputCollectedNewsInput;
+      console.log(
+        `\n🚚 [Collected News] ${typedInput.articles.length} articles received.`
+      );
+    }
+
     if (toolName === 'mcp__output__output_aggregated_news') {
-      this.aggregatedOutput = input as AggregatedNewsOutput;
+      this.aggregatedOutput = input as OutputAggregatedNewsInput;
     }
   }
 

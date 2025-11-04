@@ -51,16 +51,7 @@ macOS向け自動ニュース収集CLIツール。Claude Agent SDKを統合し�
 
 ### AIによるコードレビュー
 
-このプロジェクトではClaude Agent SDKとSerena MCPを使用した**完全自動化されたPRレビューシステム**を実装しています。
-
-**全体フロー**:
-1. **Issue作成** → Feature Reviewerがレビュー観点・テスト観点を自動生成
-2. **Julesセッション作成** → Google Julesが自動実装を開始
-3. **PR作成** → Julesが実装完了後にPRを自動作成
-4. **自動PRレビュー** → Claude AIが差分を分析してレビューコメント投稿
-5. **Jules自動修正** → レビューコメント（@jules）をJulesセッションに送信し、自動修正
-
-詳細は [`tools/README.md`](tools/README.md) を参照してください。
+このプロジェクトではClaude Agent SDKとSerena MCPを使用した自動コードレビューを実施しています。
 
 **Serena MCPの活用**:
 - **セマンティックコード解析**: LSP（Language Server Protocol）ベースでコードを構造的に理解
