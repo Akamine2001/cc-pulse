@@ -319,12 +319,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ]
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : '';
+        
         console.error('[MCP] Failed to save review to file:', error);
+        
         return {
           content: [
             {
               type: 'text',
-              text: `❌ Failed to save review to file: ${error instanceof Error ? error.message : String(error)}`
+              text: `❌ Failed to save review to file
+
+Error: ${errorMessage}
+
+Stack trace:
+${errorStack}
+
+This error will be visible in GitHub Actions logs as [Text] output.`
             }
           ],
           isError: true
@@ -379,12 +390,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ]
       };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : '';
+      
       console.error('[MCP] Failed to post review to GitHub:', error);
+      
       return {
         content: [
           {
             type: 'text',
-            text: `❌ Failed to post review to GitHub: ${error instanceof Error ? error.message : String(error)}\n\nReview was validated but not posted.`
+            text: `❌ Failed to post review to GitHub
+
+Error: ${errorMessage}
+
+Stack trace:
+${errorStack}
+
+Review was validated but not posted.
+This error will be visible in GitHub Actions logs as [Text] output.`
           }
         ],
         isError: true
@@ -501,12 +524,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ]
       };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : '';
+      
       console.error(`[MCP] Failed to update conversation for comment ${comment_id}:`, error);
+      
       return {
         content: [
           {
             type: 'text',
-            text: `❌ Failed to update conversation: ${error instanceof Error ? error.message : String(error)}`
+            text: `❌ Failed to update conversation for comment ${comment_id}
+
+Error: ${errorMessage}
+
+Stack trace:
+${errorStack}
+
+Context:
+- Action: ${action}
+- Thread ID: ${thread_id || 'null'}
+- Comment ID: ${comment_id}
+
+This error will be visible in GitHub Actions logs as [Text] output.`
           }
         ],
         isError: true
