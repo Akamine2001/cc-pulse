@@ -15,6 +15,39 @@ function getSeverityEmoji(severity: ReviewSeverity): string {
 }
 
 /**
+ * 差分外ファイルへの指摘コメントをフォーマット
+ */
+export function formatOutOfDiffComment(issue: ReviewIssue): string {
+  const emoji = getSeverityEmoji(issue.severity);
+  const label = getSeverityLabel(issue.severity);
+
+  let markdown = '';
+  if (AI_AGENT_MENTION) {
+    markdown = `@${AI_AGENT_MENTION}\n\n`;
+  }
+
+  markdown += `⚠️ 以下のファイルはPR差分に含まれていませんが、関連する問題が見つかりました\n\n`;
+  markdown += `${emoji} **[${label}] ${issue.category}**: ${issue.description}\n`;
+
+  markdown += `  - **ファイル**: \`${issue.file_path}\``;
+  if (issue.line_range) {
+    markdown += ` (L${issue.line_range.start}-${issue.line_range.end})`;
+  }
+  markdown += '\n';
+
+  if (issue.impact) {
+    markdown += `  - **影響**: ${issue.impact}\n`;
+  }
+  if (issue.suggestion) {
+    markdown += `  - **推奨対応**: ${issue.suggestion}\n`;
+  }
+
+  markdown += `\n---\n*自動レビューで検出された差分外ファイルへの指摘*`;
+
+  return markdown;
+}
+
+/**
  * 重要度別の日本語ラベルを取得
  */
 function getSeverityLabel(severity: ReviewSeverity): string {

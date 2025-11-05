@@ -358,25 +358,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
     try {
-      // 1. Post inline comments
+      // 差分ファイルリストを取得
+      const { readPRDiff } = await import('../lib/files.js');
+      const { DiffParser } = await import('../lib/parsers.js');
+      const diff = readPRDiff();
+      const diffParser = new DiffParser(diff);
+      const diffFiles = diffParser.getModifiedFiles();
+      console.error(`[MCP] Diff contains ${diffFiles.length} files`);
+
+      // 1. Post inline comments (差分内のファイル)
       console.error('[MCP] Posting inline comments to GitHub...');
       const { postInlineComments } = await import('../lib/github.js');
       await postInlineComments(prClient, reviewResult, headSha, prNumber);
 
-      // 2. Post summary comment
+      // 2. Post out-of-diff comments (差分外のファイル)
+      console.error('[MCP] Posting out-of-diff comments to GitHub...');
+      const { postOutOfDiffComments } = await import('../lib/github.js');
+      await postOutOfDiffComments(prClient, reviewResult, diffFiles, prNumber);
+
+      // 3. Post summary comment
       console.error('[MCP] Posting summary comment to GitHub...');
       const { postReviewSummaryComment } = await import('../lib/github.js');
       const { formatReviewAsMarkdown } = await import('../shared/formatter.js');
       const reviewMarkdown = formatReviewAsMarkdown(reviewResult);
       await postReviewSummaryComment(prClient, prNumber, reviewMarkdown);
 
+      // 最終的な結果メッセージ用にカウントを計算
+      const inlineCount = reviewResult.issues.filter(
+        issue => issue.file_path && issue.line_range && diffFiles.includes(issue.file_path)
+      ).length;
+      const outOfDiffCount = reviewResult.issues.filter(
+        issue => issue.file_path && !diffFiles.includes(issue.file_path)
+      ).length;
+
       return {
-        content: [
-          {
-            type: 'text',
-            text: `✅ Review submitted and posted to GitHub successfully.\n\nTotal issues: ${actualStats.total_issues}\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}`
-          }
-        ]
+        content: [{
+          type: 'text',
+          text: `✅ Review submitted successfully.\n\nTotal issues: ${actualStats.total_issues}\n- Inline comments: ${inlineCount}\n- Out-of-diff comments: ${outOfDiffCount}\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}`
+        }]
       };
     } catch (error) {
       console.error('[MCP] Failed to post review to GitHub:', error);
