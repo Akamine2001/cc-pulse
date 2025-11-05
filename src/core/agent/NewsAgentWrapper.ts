@@ -1,12 +1,8 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk/sdkTypes';
 import { getClaudeCodeExecutablePath } from '../../utils/paths';
 import { AgentExecutionError, ClaudeCodeError } from './errors';
-import type {
-  NewsAgentConfig,
-  StdioMcpServer,
-  StreamMessage,
-  ToolCallbackHandler,
-} from './types';
+import type { NewsAgentConfig, ToolCallbackHandler } from './types';
 
 /**
  * Claude Agent SDKの実行を管理するラッパークラス
@@ -33,7 +29,7 @@ export class NewsAgentWrapper {
     if (!path) {
       throw new ClaudeCodeError(
         'Claude Code CLI not found. ' +
-        'Please install it or set CLAUDE_PATH environment variable.'
+        'Please install it or set CLAUDE_PATH environment variable.',
       );
     }
     this.claudeCodePath = path;
@@ -74,40 +70,45 @@ export class NewsAgentWrapper {
       await this.processStreamMessage(stream, { onToolUse, onText });
 
       return { stderr: stderrOutput };
-    } catch (error: any) {
-      const message = error.message || 'Unknown error during agent execution';
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown error during agent execution';
       throw new AgentExecutionError(message, stderrOutput, { originalError: error });
     }
   }
 
   /**
    * SDKからのストリームメッセージを処理する
+   *
    * @param stream SDKから返されたAsyncIterableストリーム
    * @param callbacks 実行時コールバック
    * @private
    */
   private async processStreamMessage(
-    stream: AsyncIterable<StreamMessage>,
+    stream: AsyncIterable<SDKMessage>,
     callbacks: {
       onToolUse?: ToolCallbackHandler;
       onText?: (text: string) => void;
-    }
+    },
   ): Promise<void> {
     for await (const message of stream) {
+      // `tools/shared/claude/agent.ts` と同じパターンを使用
       if (message?.type === 'assistant' && message.message?.content) {
+        // SDKの型 `ContentBlock` は配列なので、ループ処理する
         for (const block of message.message.content) {
           // ツール使用を処理
-          if (block.type === 'tool_use') {
+          if (block.type === 'tool_use' && callbacks.onToolUse) {
+            // SDKの `ToolUseBlock` は `id`, `name`, `input` を持つ
+            // 型ガードにより `block` は `SDKToolUseBlock` 型に絞り込まれる
             const { name, input, id } = block;
-            if (callbacks.onToolUse) {
-              await callbacks.onToolUse(name, input, id);
-            }
+            await callbacks.onToolUse(name, input, id);
           }
 
           // テキスト出力を処理
-          if (block.type === 'text') {
+          if (block.type === 'text' && callbacks.onText) {
+            // SDKの `TextBlock` は `text` プロパティを持つ
             const text = block.text;
-            if (text?.trim() && callbacks.onText) {
+            if (text?.trim()) {
               callbacks.onText(text);
             }
           }
@@ -115,5 +116,4 @@ export class NewsAgentWrapper {
       }
     }
   }
-
 }
