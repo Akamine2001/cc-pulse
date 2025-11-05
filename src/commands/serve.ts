@@ -7,7 +7,7 @@ import { getNewsDataDir } from '../utils/paths';
 import { existsSync, readdirSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import type { DailyNewsData } from '../schemas/news-schemas';
+import type { DailyNewsData, FinalNewsItemWithFeedback } from '../schemas/news-schemas';
 
 // Import the HTML file for Bun's automatic bundling
 // Bun will automatically bundle React, TypeScript, and Tailwind CSS
@@ -123,23 +123,27 @@ async function handleGetNews(newsDir: string, datetime: string, db: Database): P
     const content = await readFile(filePath, 'utf-8');
     const data: DailyNewsData = JSON.parse(content);
 
-    // Merge is_good from SQLite (optimized: single query with IN clause)
-    if (data.news.length > 0) {
-      const ids = data.news.map(a => a.id);
-      const placeholders = ids.map(() => '?').join(',');
-      const stmt = db.prepare(`SELECT id, is_good FROM articles WHERE id IN (${placeholders})`);
-      const rows = stmt.all(...ids) as Array<{ id: string; is_good: number | null }>;
-
-      // Create feedback map for O(1) lookup
-      const feedbackMap = new Map(rows.map(r => [r.id, r.is_good]));
-
-      // Merge feedback into articles (dynamically add is_good field)
-      for (const article of data.news) {
-        (article as any).is_good = feedbackMap.get(article.id) ?? null;
-      }
+    // If there's no news, no need to merge feedback
+    if (data.news.length === 0) {
+      return Response.json(data);
     }
 
-    return Response.json(data);
+    // Merge is_good from SQLite (optimized: single query with IN clause)
+    const ids = data.news.map(a => a.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const stmt = db.prepare(`SELECT id, is_good FROM articles WHERE id IN (${placeholders})`);
+    const rows = stmt.all(...ids) as Array<{ id: string; is_good: number | null }>;
+
+    // Create feedback map for O(1) lookup
+    const feedbackMap = new Map(rows.map(r => [r.id, r.is_good]));
+
+    // Create a new array with feedback merged
+    const newsWithFeedback: FinalNewsItemWithFeedback[] = data.news.map(article => ({
+      ...article,
+      is_good: feedbackMap.get(article.id) ?? null,
+    }));
+
+    return Response.json({ ...data, news: newsWithFeedback });
   } catch (error) {
     console.error('Error getting news:', error);
     return Response.json({ error: 'Failed to get news data' }, { status: 500 });

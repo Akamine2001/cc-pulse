@@ -1,4 +1,10 @@
-import type { AggregatedNewsOutput, CapturedNewsData } from './types';
+import type {
+  AggregatedNewsOutput,
+  CapturedNewsData,
+  OutputAggregatedNewsInput,
+  OutputCollectedNewsInput,
+  SearchSimilarInput,
+} from './types';
 
 /**
  * ツール呼び出しの結果をキャプチャし、整理する責務を持つクラス
@@ -18,18 +24,29 @@ export class ResultCaptor {
    * @param input ツールに渡された入力
    * @param toolId ツール呼び出しの一意のID
    */
-  public handleToolCall(toolName: string, input: any, toolId: string): void {
+  public handleToolCall(toolName: string, input: unknown, toolId: string): void {
     this.iterations++;
 
     if (toolName === 'mcp__embedding__search_similar') {
-      const queryText = input?.query_text || '';
+      // ツール名で分岐しているため、inputの型は確定している
+      const typedInput = input as SearchSimilarInput;
+      const queryText = typedInput.query_text || '';
       this.similarityChecks.set(toolId, queryText);
       console.log(`\n🔍 [Similarity Check ${this.iterations}]`);
       console.log(`   Query: ${queryText.substring(0, 80)}...`);
     }
 
+    if (toolName === 'mcp__output__output_collected_news') {
+      // ツール名で分岐しているため、inputの型は確定している
+      const typedInput = input as OutputCollectedNewsInput;
+      console.log(
+        `\n🚚 [Collected News] ${typedInput.articles.length} articles received.`
+      );
+    }
+
     if (toolName === 'mcp__output__output_aggregated_news') {
-      this.aggregatedOutput = input as AggregatedNewsOutput;
+      // ツール名で分岐しているため、inputの型は確定している
+      this.aggregatedOutput = input as OutputAggregatedNewsInput;
     }
   }
 

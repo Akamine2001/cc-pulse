@@ -114,6 +114,14 @@ export const FinalNewsItemSchema = z.object({
 export type FinalNewsItem = z.infer<typeof FinalNewsItemSchema>;
 
 /**
+ * フィードバック情報を含むニュース記事
+ * WebUI表示用
+ */
+export interface FinalNewsItemWithFeedback extends FinalNewsItem {
+  is_good: number | null;  // 1: good, 0: bad, null: 未評価
+}
+
+/**
  * Execution statistics
  */
 export const ExecutionStatsSchema = z.object({

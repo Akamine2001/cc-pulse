@@ -1,4 +1,5 @@
 import { CCPulseDatetime } from '../../utils/CCPulseDatetime';
+import { AgentExecutionError, NewsCollectionError } from './errors';
 import { NewsAgentWrapper } from './NewsAgentWrapper';
 import { ResultCaptor } from './ResultCaptor';
 import { NewsResultBuilder } from './NewsResultBuilder';
@@ -96,18 +97,32 @@ export class NewsOrchestrator {
       },
     };
 
-    await this.wrapper.execute({
-      prompt: masterPrompt,
-      agents,
-      onToolUse: this.captor.handleToolCall.bind(this.captor),
-      onText: (text: string) => {
-        if (text && text.trim()) {
-          console.log(`\n💭 [Agent Thinking]`);
-          const displayText = text.length > 500 ? text.substring(0, 500) + '...' : text;
-          console.log(`   ${displayText}`);
-        }
-      },
-    });
+    try {
+      await this.wrapper.execute({
+        prompt: masterPrompt,
+        agents,
+        onToolUse: this.captor.handleToolCall.bind(this.captor),
+        onText: (text: string) => {
+          if (text && text.trim()) {
+            console.log(`\n💭 [Agent Thinking]`);
+            const displayText = text.length > 500 ? text.substring(0, 500) + '...' : text;
+            console.log(`   ${displayText}`);
+          }
+        },
+      });
+    } catch (error: unknown) {
+      if (error instanceof AgentExecutionError) {
+        throw new NewsCollectionError('Failed during agent execution', {
+          originalError: error,
+          stderr: error.stderr,
+        });
+      }
+      const message =
+        error instanceof Error ? error.message : 'An unexpected error occurred';
+      throw new NewsCollectionError(message, {
+        originalError: error,
+      });
+    }
 
     const capturedData = this.captor.getCapturedData();
 

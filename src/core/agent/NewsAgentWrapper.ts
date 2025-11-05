@@ -1,6 +1,12 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { getClaudeCodeExecutablePath } from '../../utils/paths';
-import type { NewsAgentConfig, StdioMcpServer, ToolCallbackHandler } from './types';
+import { AgentExecutionError, ClaudeCodeError } from './errors';
+import type {
+  NewsAgentConfig,
+  StdioMcpServer,
+  StreamMessage,
+  ToolCallbackHandler,
+} from './types';
 
 /**
  * Claude Agent SDKの実行を管理するラッパークラス
@@ -25,7 +31,7 @@ export class NewsAgentWrapper {
   constructor(config: NewsAgentConfig = {}) {
     const path = getClaudeCodeExecutablePath();
     if (!path) {
-      throw new Error(
+      throw new ClaudeCodeError(
         'Claude Code CLI not found. ' +
         'Please install it or set CLAUDE_PATH environment variable.'
       );
@@ -69,9 +75,8 @@ export class NewsAgentWrapper {
 
       return { stderr: stderrOutput };
     } catch (error: any) {
-      console.error('❌ NewsAgentWrapper execution failed:', error.message);
-      console.error('   STDERR:', stderrOutput);
-      throw error;
+      const message = error.message || 'Unknown error during agent execution';
+      throw new AgentExecutionError(message, stderrOutput, { originalError: error });
     }
   }
 
@@ -82,7 +87,7 @@ export class NewsAgentWrapper {
    * @private
    */
   private async processStreamMessage(
-    stream: AsyncIterable<any>,
+    stream: AsyncIterable<StreamMessage>,
     callbacks: {
       onToolUse?: ToolCallbackHandler;
       onText?: (text: string) => void;
@@ -93,7 +98,7 @@ export class NewsAgentWrapper {
         for (const block of message.message.content) {
           // ツール使用を処理
           if (block.type === 'tool_use') {
-            const { name, input, id } = block as any;
+            const { name, input, id } = block;
             if (callbacks.onToolUse) {
               await callbacks.onToolUse(name, input, id);
             }
@@ -101,7 +106,7 @@ export class NewsAgentWrapper {
 
           // テキスト出力を処理
           if (block.type === 'text') {
-            const text = (block as any).text;
+            const text = block.text;
             if (text?.trim() && callbacks.onText) {
               callbacks.onText(text);
             }
