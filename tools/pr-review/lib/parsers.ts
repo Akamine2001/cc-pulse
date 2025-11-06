@@ -38,26 +38,20 @@ export class DiffParser {
     if (!this.diff) {
       return [];
     }
-
     const files = new Set<string>();
-    // `diff --git a/path/to/file b/path/to/file` のような行からパスを抽出
-    // files.tsの実装と一貫性を持たせる
-    const regex = /^diff --git a\/(.+?) b\/(.+?)$/gm;
-    let match;
-
-    while ((match = regex.exec(this.diff)) !== null) {
-      // b側のパスを使用（新規ファイル、変更されたファイル）
-      // a側が /dev/null の場合は新規ファイル
-      // b側が /dev/null の場合は削除されたファイル
-      const filePath = match[2];
-      if (filePath && filePath !== '/dev/null') {
-        files.add(filePath);
-      } else if (match[1] && filePath === '/dev/null') {
-        // 削除されたファイルの場合、a側のパスを記録
-        files.add(match[1]);
+    const lines = this.diff.split('\n');
+    for (const line of lines) {
+      const match = line.match(/^diff --git a\/(.+?) b\/(.+?)$/);
+      if (match) {
+        const filePath = match[2]; // b側のパス（新しい方）
+        if (filePath !== '/dev/null') {
+          files.add(filePath);
+        } else {
+          // ファイルが削除された場合 (b/ が /dev/null)、a/ のパスを使用
+          files.add(match[1]);
+        }
       }
     }
-
     return Array.from(files);
   }
 
