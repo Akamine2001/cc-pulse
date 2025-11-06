@@ -13,6 +13,8 @@ import type { ReviewComment } from '../shared/schemas';
 // Diff Parser
 // ============================================================================
 
+import { readPRDiff } from './files';
+
 /**
  * PR差分から該当箇所のコードを取得
  */
@@ -21,38 +23,31 @@ export class DiffParser {
   private readonly SNIPPET_HEAD_LINES = 10; // スニペット省略時の先頭行数
   private readonly SNIPPET_TAIL_LINES = 10; // スニペット省略時の末尾行数
   private readonly CONTEXT_LINES = 5; // コンテキスト行数
-  private diff: string = '';
+  private diffContent: string;
 
-  /**
-   * @param diff PRの差分（`git diff` の出力）
-   */
-  constructor(diff: string = '') {
-    this.diff = diff;
+  constructor() {
+    try {
+      this.diffContent = readPRDiff();
+    } catch (error) {
+      console.error("Failed to read PR diff:", error);
+      this.diffContent = '';
+    }
   }
 
   /**
-   * PR差分から変更されたファイルパスのリストを抽出
-   * @returns ファイルパスの配列 (e.g., ["src/core/agent.ts"])
+   * 差分から変更されたファイルパスのリストを取得
+   * @returns {string[]} 変更されたファイルパスの配列
    */
   getModifiedFiles(): string[] {
-    if (!this.diff) {
-      return [];
-    }
-
     const files = new Set<string>();
-    // `diff --git a/path/to/file b/path/to/file` のような行からパスを抽出
-    const regex = /^diff --git a\/(.+) b\//gm;
-    let match;
-
-    while ((match = regex.exec(this.diff)) !== null) {
-      // b/ 以降のパスが `dev/null` の場合は削除されたファイル
-      // a/ 以降のパスが `dev/null` の場合は新規ファイル
-      // どちらの場合も a/ のパスを採用（正規化されているため）
-      if (match[1]) {
-        files.add(match[1]);
+    const lines = this.diffContent.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('--- a/')) {
+        files.add(line.substring(6));
+      } else if (line.startsWith('+++ b/')) {
+        files.add(line.substring(6));
       }
     }
-
     return Array.from(files);
   }
 
@@ -261,7 +256,7 @@ export async function collectExistingConversations(
 
   console.log(`📋 Found ${autoReviewComments.length} existing review comments`);
 
-  const parser = new DiffParser(); // diffなしで初期化
+  const parser = new DiffParser();
   const reviewComments: ReviewComment[] = [];
 
   for (const comment of autoReviewComments) {

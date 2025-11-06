@@ -6,12 +6,11 @@
 
 import { existsSync } from 'fs';
 import type { Octokit } from 'octokit';
-import { BOT_SIGNATURE, AI_AGENT_MENTION } from '../../shared/constants';
-import type { ReviewResult, ReviewIssue } from '../shared/schemas';
+import { BOT_SIGNATURE } from '../../shared/constants';
+import type { ReviewResult } from '../shared/schemas';
 import { DiffParser } from './parsers';
-import { formatIssueAsInlineComment } from '../shared/formatter';
+import { formatIssueAsInlineComment, formatOutOfDiffComment } from '../shared/formatter';
 import { PRClient } from '../../shared/github/pr-client';
-import { readPRDiff } from './files';
 
 // ============================================================================
 // Comment Poster（PR Review特有のロジック）
@@ -47,10 +46,9 @@ export async function postInlineComments(
   headSha: string,
   prNumber: number
 ): Promise<void> {
-  // 差分内、かつ file_path と line_range がある問題のみ
-  const diffFiles = new DiffParser(readPRDiff()).getModifiedFiles();
+  // file_path と line_range がある問題のみ
   const inlineIssues = reviewResult.issues.filter(
-    issue => issue.file_path && issue.line_range && diffFiles.includes(issue.file_path)
+    issue => issue.file_path && issue.line_range
   );
 
   if (inlineIssues.length === 0) {
@@ -117,7 +115,7 @@ export async function postInlineComments(
  *
  * @param prClient PR APIクライアント
  * @param reviewResult レビュー結果
- * @param diffFiles 差分に含まれるファイルリスト
+ * @param diffFiles 差分に含まれるファイルパスのリスト
  * @param prNumber PR番号
  */
 export async function postOutOfDiffComments(
@@ -131,9 +129,11 @@ export async function postOutOfDiffComments(
   );
 
   if (outOfDiffIssues.length === 0) {
-    console.log('ℹ️ No out-of-diff issues to post');
+    console.log('ℹ️ No out-of-diff issues to post.');
     return;
   }
+
+  console.log(`💬 Posting ${outOfDiffIssues.length} out-of-diff comments...`);
 
   // 重要度順にソート
   const sortedIssues = outOfDiffIssues.sort((a, b) => {
@@ -141,61 +141,21 @@ export async function postOutOfDiffComments(
     return severityOrder[a.severity] - severityOrder[b.severity];
   });
 
-  console.log(`💬 Posting ${sortedIssues.length} out-of-diff comments...`);
-  let successCount = 0;
-  let failCount = 0;
-
   for (const issue of sortedIssues) {
     try {
       const commentBody = formatOutOfDiffComment(issue);
       await prClient.postComment(prNumber, commentBody);
-      console.log(`  ✅ ${issue.file_path}:${issue.line_range?.start || ''}`);
-      successCount++;
-    } catch (error: unknown) {
+      console.log(`  ✅ Posted out-of-diff comment for ${issue.file_path}`);
+    } catch (error) {
       console.error(`  ❌ Failed to post out-of-diff comment for ${issue.file_path}`);
       if (error instanceof Error) {
         console.error(`     Error: ${error.message}`);
+      } else {
+        console.error(`     Error:`, error);
       }
-      failCount++;
     }
   }
-  console.log(`✅ Posted ${successCount} out-of-diff comments (${failCount} failed)`);
 }
-
-/**
- * 差分外ファイルへの指摘コメントをフォーマット
- * @param issue 指摘事項
- * @returns コメント本文
- */
-function formatOutOfDiffComment(issue: ReviewIssue): string {
-  const lineInfo = issue.line_range
-    ? `${issue.line_range.start}-${issue.line_range.end}`
-    : 'N/A';
-
-  const severityMap = {
-    critical: 'Critical',
-    high: 'High',
-    medium: 'Medium',
-    low: 'Low'
-  };
-
-  return `${AI_AGENT_MENTION}
-
-⚠️ 以下のファイルはPR差分に含まれていませんが、関連する問題が見つかりました
-
-**ファイル**: ${issue.file_path}:${lineInfo}
-**重要度**: ${severityMap[issue.severity]}
-
-**問題**:
-${issue.description}
-
-**提案**:
-${issue.suggestion || '具体的な修正案はありません。'}
-
----
-*自動レビューで検出された差分外ファイルへの指摘*`;
-}
-
 
 /**
  * PRにレビューサマリーコメントを投稿
