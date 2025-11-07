@@ -227,8 +227,8 @@ export class ClaudeAgent {
 
         if (message?.type === 'user' && message.message?.content && Array.isArray(message.message.content)) {
           for (const block of message.message.content) {
-            if (block.type === 'tool_result') {
-              const toolResult = block as any;
+            if (typeof block === 'object' && block !== null && 'type' in block && block.type === 'tool_result') {
+              const toolResult = block as { tool_use_id: string; content?: unknown; isError?: boolean };
 
               if (process.env.DEBUG_TOOL_INPUT === 'true') {
                 console.log(`[Tool Result] (tool_use_id: ${toolResult.tool_use_id})`);

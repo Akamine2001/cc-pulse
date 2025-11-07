@@ -77,10 +77,12 @@ export function formatOutOfDiffComment(issue: ReviewIssue): string {
   markdown += `⚠️ **PR差分外のファイルに関する指摘**\n\n`;
   markdown += `以下のファイルはPR差分に含まれていませんが、関連する問題が見つかりました。\n\n`;
   markdown += `**ファイル**: \`${issue.file_path}${lineInfo}\`\n`;
-  markdown += `**重要度**: ${severityLabel}\n\n`;
+  markdown += `**カテゴリ**: ${issue.category}\n`;
+  markdown += `**重要度**: ${severityLabel}\n`;
+  markdown += `**影響**: ${issue.impact}\n\n`;
   markdown += `**問題**:\n${issue.description}\n\n`;
   markdown += `**提案**:\n${issue.suggestion}\n\n`;
-  markdown += `----\n*自動レビューで検出された差分外ファイルへの指摘*`;
+  markdown += `---\n_- ${BOT_SIGNATURE}_`;
 
   return markdown;
 }
