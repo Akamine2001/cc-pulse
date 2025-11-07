@@ -132,6 +132,7 @@ Read(file_path="/tmp/pr-review/xxx-1-src_utils_helper.ts.diff")
 **重要な注意点**:
 - `issues`は配列、`stats`はオブジェクトとして渡す（JSON文字列化しない）
 - 問題がない場合は `issues: []` で提出可能
+- `file_path`は必須（問題が発生しているファイルパスを必ず設定）
 - `evidence`フィールドはオプショナル（根拠がある場合のみ）
 
 **⚠️ よくあるエラー**:

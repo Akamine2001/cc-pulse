@@ -259,12 +259,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       try {
         console.error('[MCP] LOCAL_MODE detected - saving to file instead of GitHub...');
 
-        const { formatReviewAsMarkdown } = await import('../shared/formatter.js');
+        const { formatReviewAsMarkdown, formatOutOfDiffComment } = await import('../shared/formatter.js');
         const reviewMarkdown = formatReviewAsMarkdown(reviewResult);
 
-        // インラインコメントもMarkdownに追加
+        // 差分ファイルリストを取得（差分外判定用）
+        const { DiffParser } = await import('../lib/parsers.js');
+        const diffParser = new DiffParser();
+        const diffFiles = diffParser.getModifiedFiles();
+
+        // インラインコメント（差分内かつline_rangeあり）
         const inlineIssues = reviewResult.issues.filter(
-          issue => issue.file_path && issue.line_range
+          issue => issue.file_path && issue.line_range && diffFiles.includes(issue.file_path)
+        );
+
+        // 差分外コメント（file_pathあり、diffFilesに含まれない）
+        const outOfDiffIssues = reviewResult.issues.filter(
+          issue => issue.file_path && !diffFiles.includes(issue.file_path)
         );
 
         let fullMarkdown = `# PR #${prNumber} 自動レビュー結果\n\n`;
@@ -292,6 +302,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 fullMarkdown += `**提案**:\n${issue.suggestion}\n\n`;
               }
             }
+          }
+        }
+
+        if (outOfDiffIssues.length > 0) {
+          fullMarkdown += `---\n\n## ⚠️ 差分外ファイルへの指摘\n\n`;
+          fullMarkdown += `以下のファイルはPR差分に含まれていませんが、関連する問題が見つかりました。\n\n`;
+
+          for (const issue of outOfDiffIssues) {
+            const severityLabel = { critical: '重大', high: '重要', medium: '中程度', low: '軽微' }[issue.severity];
+            const lineInfo = issue.line_range ? `:${issue.line_range.start}-${issue.line_range.end}` : '';
+
+            fullMarkdown += `### ${issue.file_path}${lineInfo} (${severityLabel})\n\n`;
+            fullMarkdown += `**問題**:\n${issue.description}\n\n`;
+            fullMarkdown += `**提案**:\n${issue.suggestion}\n\n`;
           }
         }
 
@@ -367,7 +391,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // 1. Post inline comments（差分内のファイル）
       console.error('[MCP] Posting inline comments to GitHub...');
       const { postInlineComments } = await import('../lib/github.js');
-      await postInlineComments(prClient, reviewResult, headSha, prNumber);
+      await postInlineComments(prClient, reviewResult, headSha, prNumber, diffFiles);
 
       // 2. Post out-of-diff comments（差分外のファイル）
       console.error('[MCP] Posting out-of-diff comments to GitHub...');

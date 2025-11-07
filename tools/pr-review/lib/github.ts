@@ -44,11 +44,12 @@ export async function postInlineComments(
   prClient: PRClient,
   reviewResult: ReviewResult,
   headSha: string,
-  prNumber: number
+  prNumber: number,
+  diffFiles: string[]
 ): Promise<void> {
-  // file_path と line_range がある問題のみ
+  // file_path と line_range があり、かつ差分に含まれる問題のみ
   const inlineIssues = reviewResult.issues.filter(
-    issue => issue.file_path && issue.line_range
+    issue => issue.file_path && issue.line_range && diffFiles.includes(issue.file_path)
   );
 
   if (inlineIssues.length === 0) {
