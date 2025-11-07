@@ -42,10 +42,9 @@ export class DiffParser {
     const files = new Set<string>();
     const lines = this.diffContent.split('\n');
     for (const line of lines) {
-      if (line.startsWith('--- a/')) {
-        files.add(line.substring(6));
-      } else if (line.startsWith('+++ b/')) {
-        files.add(line.substring(6));
+      const match = line.match(/^diff --git a\/(.+?) b\/(.+?)$/);
+      if (match && match[2]) {
+        files.add(match[2]); // b側のパス（新しい方）
       }
     }
     return Array.from(files);
