@@ -224,6 +224,23 @@ export class ClaudeAgent {
             }
           }
         }
+
+        if (message?.type === 'user' && message.message?.content && Array.isArray(message.message.content)) {
+          for (const block of message.message.content) {
+            if (block.type === 'tool_result') {
+              const toolResult = block as any;
+
+              if (process.env.DEBUG_TOOL_INPUT === 'true') {
+                console.log(`[Tool Result] (tool_use_id: ${toolResult.tool_use_id})`);
+                console.log(JSON.stringify(toolResult.content, null, 2));
+
+                if (toolResult.isError) {
+                  console.error(`[Tool Error] Tool execution failed`);
+                }
+              }
+            }
+          }
+        }
       }
 
       // 正常終了（最後まで実行完了）
