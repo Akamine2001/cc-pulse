@@ -43,12 +43,13 @@ export class DiffParser {
     for (const line of lines) {
       const match = line.match(/^diff --git a\/(.+?) b\/(.+?)$/);
       if (match) {
-        const filePath = match[2]; // b側のパス（新しい方）
-        if (filePath !== '/dev/null') {
-          files.add(filePath);
+        const filePathB = match[2]; // b側のパス（新しい方）
+        if (filePathB !== '/dev/null') {
+          files.add(filePathB);
         } else {
           // ファイルが削除された場合 (b/ が /dev/null)、a/ のパスを使用
-          files.add(match[1]);
+          const filePathA = match[1];
+          files.add(filePathA);
         }
       }
     }
