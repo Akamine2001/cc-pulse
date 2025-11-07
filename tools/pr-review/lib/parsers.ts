@@ -261,7 +261,7 @@ export async function collectExistingConversations(
 
   console.log(`📋 Found ${autoReviewComments.length} existing review comments`);
 
-  const parser = new DiffParser(); // diffなしで初期化
+  const parser = new DiffParser();
   const reviewComments: ReviewComment[] = [];
 
   for (const comment of autoReviewComments) {

@@ -42,7 +42,7 @@ export function formatOutOfDiffComment(issue: ReviewIssue): string {
     markdown += `  - **推奨対応**: ${issue.suggestion}\n`;
   }
 
-  markdown += `\n---\n*自動レビューで検出された差分外ファイルへの指摘*`;
+  markdown += `\n\n_- ${BOT_SIGNATURE}_`;
 
   return markdown;
 }
