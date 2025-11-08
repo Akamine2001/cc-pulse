@@ -13,6 +13,8 @@ import type { ReviewComment } from '../shared/schemas';
 // Diff Parser
 // ============================================================================
 
+import { readPRDiff } from './files';
+
 /**
  * PR差分から該当箇所のコードを取得
  */
@@ -21,6 +23,32 @@ export class DiffParser {
   private readonly SNIPPET_HEAD_LINES = 10; // スニペット省略時の先頭行数
   private readonly SNIPPET_TAIL_LINES = 10; // スニペット省略時の末尾行数
   private readonly CONTEXT_LINES = 5; // コンテキスト行数
+  private diffContent: string;
+
+  constructor() {
+    try {
+      this.diffContent = readPRDiff();
+    } catch (error) {
+      console.error("Failed to read PR diff:", error);
+      this.diffContent = '';
+    }
+  }
+
+  /**
+   * 差分から変更されたファイルパスのリストを取得
+   * @returns {string[]} 変更されたファイルパスの配列
+   */
+  getModifiedFiles(): string[] {
+    const files = new Set<string>();
+    const lines = this.diffContent.split('\n');
+    for (const line of lines) {
+      const match = line.match(/^diff --git a\/(.+?) b\/(.+?)$/);
+      if (match && match[2]) {
+        files.add(match[2]); // b側のパス（新しい方）
+      }
+    }
+    return Array.from(files);
+  }
 
   /**
    * コメント用のコードスニペットを整形（長い場合は省略）

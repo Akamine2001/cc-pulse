@@ -15,7 +15,7 @@ on:
     types: [created]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   issues: read
 
@@ -79,6 +79,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+          DEBUG_TOOL_INPUT: 'true'
         run: |
           bun run tools/pr-review/index.ts
 

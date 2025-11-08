@@ -25,7 +25,7 @@ export const ReviewIssueSchema = z.object({
   severity: ReviewSeveritySchema,
   category: z.string(),
   description: z.string(),
-  file_path: z.string().optional(),
+  file_path: z.string(),
   line_range: z.object({
     start: z.number(),
     end: z.number()

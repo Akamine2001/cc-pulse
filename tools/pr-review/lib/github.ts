@@ -9,7 +9,7 @@ import type { Octokit } from 'octokit';
 import { BOT_SIGNATURE } from '../../shared/constants';
 import type { ReviewResult } from '../shared/schemas';
 import { DiffParser } from './parsers';
-import { formatIssueAsInlineComment } from '../shared/formatter';
+import { formatIssueAsInlineComment, formatOutOfDiffComment } from '../shared/formatter';
 import { PRClient } from '../../shared/github/pr-client';
 
 // ============================================================================
@@ -44,11 +44,12 @@ export async function postInlineComments(
   prClient: PRClient,
   reviewResult: ReviewResult,
   headSha: string,
-  prNumber: number
+  prNumber: number,
+  diffFiles: string[]
 ): Promise<void> {
-  // file_path と line_range がある問題のみ
+  // file_path と line_range があり、かつ差分に含まれる問題のみ
   const inlineIssues = reviewResult.issues.filter(
-    issue => issue.file_path && issue.line_range
+    issue => issue.file_path && issue.line_range && diffFiles.includes(issue.file_path)
   );
 
   if (inlineIssues.length === 0) {
@@ -108,6 +109,53 @@ export async function postInlineComments(
   }
 
   console.log(`✅ Posted ${successCount} inline comments (${failCount} failed)`);
+}
+
+/**
+ * 差分に含まれないファイルへの指摘を通常コメントとして投稿
+ *
+ * @param prClient PR APIクライアント
+ * @param reviewResult レビュー結果
+ * @param diffFiles 差分に含まれるファイルパスのリスト
+ * @param prNumber PR番号
+ */
+export async function postOutOfDiffComments(
+  prClient: PRClient,
+  reviewResult: ReviewResult,
+  diffFiles: string[],
+  prNumber: number
+): Promise<void> {
+  const outOfDiffIssues = reviewResult.issues.filter(
+    issue => issue.file_path && !diffFiles.includes(issue.file_path)
+  );
+
+  if (outOfDiffIssues.length === 0) {
+    console.log('ℹ️ No out-of-diff issues to post.');
+    return;
+  }
+
+  console.log(`💬 Posting ${outOfDiffIssues.length} out-of-diff comments...`);
+
+  // 重要度順にソート
+  const sortedIssues = outOfDiffIssues.sort((a, b) => {
+    const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    return severityOrder[a.severity] - severityOrder[b.severity];
+  });
+
+  for (const issue of sortedIssues) {
+    try {
+      const commentBody = formatOutOfDiffComment(issue);
+      await prClient.postComment(prNumber, commentBody);
+      console.log(`  ✅ Posted out-of-diff comment for ${issue.file_path}`);
+    } catch (error) {
+      console.error(`  ❌ Failed to post out-of-diff comment for ${issue.file_path}`);
+      if (error instanceof Error) {
+        console.error(`     Error: ${error.message}`);
+      } else {
+        console.error(`     Error:`, error);
+      }
+    }
+  }
 }
 
 /**

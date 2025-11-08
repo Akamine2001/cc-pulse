@@ -62,6 +62,32 @@ function formatIssue(issue: ReviewIssue): string {
 }
 
 /**
+ * 差分外ファイルへの指摘を通常コメントとしてフォーマット
+ */
+export function formatOutOfDiffComment(issue: ReviewIssue): string {
+  const severityLabel = getSeverityLabel(issue.severity);
+  const lineInfo = issue.line_range ? `:${issue.line_range.start}-${issue.line_range.end}` : '';
+
+  // AIエージェントメンション（constants.tsに設定されている場合のみ追加）
+  let markdown = '';
+  if (AI_AGENT_MENTION) {
+    markdown = `@${AI_AGENT_MENTION}\n\n`;
+  }
+
+  markdown += `⚠️ **PR差分外のファイルに関する指摘**\n\n`;
+  markdown += `以下のファイルはPR差分に含まれていませんが、関連する問題が見つかりました。\n\n`;
+  markdown += `**ファイル**: \`${issue.file_path}${lineInfo}\`\n`;
+  markdown += `**カテゴリ**: ${issue.category}\n`;
+  markdown += `**重要度**: ${severityLabel}\n`;
+  markdown += `**影響**: ${issue.impact}\n\n`;
+  markdown += `**問題**:\n${issue.description}\n\n`;
+  markdown += `**提案**:\n${issue.suggestion}\n\n`;
+  markdown += `---\n_- ${BOT_SIGNATURE}_`;
+
+  return markdown;
+}
+
+/**
  * 個別の問題をインラインコメント用にフォーマット
  */
 export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: string): string {
