@@ -7,7 +7,7 @@
  */
 
 import { Octokit } from 'octokit';
-import { validateEnv } from './shared/env';
+import { validatePrReviewEnv } from '../shared/env';
 import { PRClient } from '../shared/github/pr-client';
 import { ReviewOrchestrator } from './core/orchestrator';
 
@@ -16,7 +16,7 @@ import { ReviewOrchestrator } from './core/orchestrator';
  */
 async function main() {
   // 環境変数の検証
-  const env = validateEnv();
+  const env = validatePrReviewEnv();
 
   // GitHub リポジトリ情報の解析
   const repoParts = env.GITHUB_REPOSITORY.split('/');
