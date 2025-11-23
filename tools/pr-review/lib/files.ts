@@ -104,12 +104,12 @@ export interface FileDiff {
  * レビュープロンプトを読み込んで展開
  *
  * @param fileDiffs ファイル単位の差分情報の配列
- * @param reviewGuidelines レビュー観点
+ * @param guidelinesFilePath レビュー観点ファイルのパス
  * @returns 展開済みプロンプト
  */
 export function loadReviewPrompt(
   fileDiffs: FileDiff[],
-  reviewGuidelines: string
+  guidelinesFilePath: string
 ): string {
   const promptPath = join(__dirname, '../prompts/review-prompt.md');
 
@@ -130,8 +130,8 @@ export function loadReviewPrompt(
   }).join('\n\n');
 
   return template
-    .replace('{{DIFF_FILES_LIST}}', diffFilesList)
-    .replace('{{REVIEW_GUIDELINES}}', reviewGuidelines);
+    .replace(/\{\{DIFF_FILES_LIST\}\}/g, diffFilesList)
+    .replace(/\{\{GUIDELINES_FILE_PATH\}\}/g, guidelinesFilePath);
 }
 
 /**

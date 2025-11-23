@@ -6,7 +6,8 @@
 
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { ClaudeAgent } from '../../shared/claude/agent';
+import { ClaudeAgent } from '../../shared/claude/claude-agent';
+import { getClaudeCodeExecutablePath } from '../../../src/utils/paths';
 import { loadResolveCommentPrompt } from '../lib/files';
 import type { ReviewComment } from '../shared/schemas';
 import type { FileDiff } from '../lib/files';
@@ -47,10 +48,34 @@ export class CommentResolver {
 
     console.log('🤖 Starting comment resolution with Agent SDK...');
 
+    // Claude Code CLIパスを取得
+    const claudePath = getClaudeCodeExecutablePath();
+    if (!claudePath) {
+      throw new Error(
+        'Claude Code CLI not found. ' +
+        'Please install it or set CLAUDE_PATH environment variable.'
+      );
+    }
+
     // ClaudeAgentを初期化
     const agent = new ClaudeAgent({
+      systemPrompt: '', // コメント解決はプロンプトで指示
+      model: 'claude-sonnet-4-5',
+      maxThinkingTokens: 10000, // Extended Thinking有効化
+      pathToClaudeCodeExecutable: claudePath,
+      onText: (text) => {
+        console.log(`[Text] ${text}`);
+      },
+      onThinking: (thinking) => {
+        console.log(`[Thinking] ${thinking}`);
+      },
+      onToolUse: (toolName, input) => {
+        console.log(`[Tool] ${toolName}`);
+        console.log(`[Tool Input]`, JSON.stringify(input, null, 2));
+      },
       mcpServers: {
         'review-util': {
+          type: 'stdio',
           command: 'bun',
           args: ['run', `${__dirname}/../mcp/review-util-mcp-server.ts`],
           env: {
@@ -63,6 +88,7 @@ export class CommentResolver {
           }
         },
         'serena': {
+          type: 'stdio',
           command: 'uvx',
           args: [
             '--from',
@@ -121,9 +147,7 @@ export class CommentResolver {
     });
 
     // ClaudeAgentでコメント解決を実行（最後まで実行）
-    await agent.query({
-      prompt: promptText
-    });
+    await agent.query(promptText);
 
     console.log('✅ Comment resolution completed');
   }

@@ -103,3 +103,34 @@ export interface ReviewComment {
   thread_id: string | null;
   is_resolved: boolean;
 }
+
+/**
+ * カテゴリ別の総評コメント
+ */
+export const CategoryCommentSchema = z.object({
+  category: z.string()
+    .min(1, 'カテゴリ名は必須です')
+    .max(50, 'カテゴリ名は50文字以内')
+    .describe('問題のカテゴリ（例: エラーハンドリング、型安全性）'),
+  comment: z.string()
+    .min(10, 'コメントは10文字以上必要です')
+    .max(100, 'コメントは100文字以内')
+    .describe('このカテゴリの評価コメント（簡潔に）')
+});
+
+export type CategoryComment = z.infer<typeof CategoryCommentSchema>;
+
+/**
+ * submit_all_reviewsの入力スキーマ
+ */
+export const SubmitAllReviewsInputSchema = z.object({
+  summary_comment: z.string()
+    .min(10, '総評は10文字以上必要です')
+    .max(100, '総評は100文字以内')
+    .describe('全体の総評（簡潔に）'),
+  category_comments: z.array(CategoryCommentSchema)
+    .min(1, '少なくとも1つのカテゴリコメントが必要です')
+    .describe('カテゴリ別の評価コメント（問題が見つかったカテゴリについて記載）')
+});
+
+export type SubmitAllReviewsInput = z.infer<typeof SubmitAllReviewsInputSchema>;

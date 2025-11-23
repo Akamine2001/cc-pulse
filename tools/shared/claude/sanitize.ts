@@ -19,7 +19,7 @@
  * const log = '--mcp-config {"mcpServers":{"review-util":{"env":{"GITHUB_TOKEN":"secret"}}}}';
  * sanitizeSensitiveData(log);
  * // => '--mcp-config {"mcpServers":{"review-util":{"env":{"***REDACTED***"}}}}'
- * 
+ *
  * const error = 'Error: GITHUB_TOKEN is required';
  * sanitizeSensitiveData(error);
  * // => 'Error: ***ENV_VAR*** is required'
@@ -36,7 +36,7 @@ export function sanitizeSensitiveData(text: string): string {
   // 2. 一般的な環境変数名をマスキング
   const envVarPatterns = [
     'GITHUB_TOKEN',
-    'CLAUDE_CODE_OAUTH_TOKEN', 
+    'CLAUDE_CODE_OAUTH_TOKEN',
     'ANTHROPIC_API_KEY',
     'JULES_API_KEY',
     'JULES_GITHUB_TOKEN',

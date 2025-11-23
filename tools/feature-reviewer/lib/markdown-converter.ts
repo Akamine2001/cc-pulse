@@ -53,7 +53,12 @@ function fileReferenceToMarkdown(ref: FileReference): string {
 function businessRuleToMarkdown(rule: BusinessRule): string {
   const lines: string[] = [];
 
-  lines.push(`### ${rule.title}`);
+  // 絵文字を除去（全ての絵文字と余分な空白を削除）
+  const cleanTitle = rule.title
+    .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27FF}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  lines.push(`### ${cleanTitle}`);
   lines.push(rule.description);
   if (rule.requirement) lines.push(`- 要件: ${rule.requirement}`);
   if (rule.fileReferences.length > 0) {

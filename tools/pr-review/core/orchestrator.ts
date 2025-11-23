@@ -15,6 +15,7 @@ import { readPRDiff, readReviewGuidelines, saveDiffByFiles, deleteTempDiffFiles 
 import { PRClient } from '../../shared/github/pr-client';
 import { ThreadResolver } from '../../shared/github/thread-resolver';
 import { GuidelinesExtractor } from '../../shared/github/guidelines-extractor';
+import { parseGuidelinesMarkdown } from '../lib/guidelines-parser';
 
 export class ReviewOrchestrator {
   constructor(
@@ -38,6 +39,7 @@ export class ReviewOrchestrator {
     console.log('');
 
     const commentsFilePath = `/tmp/review-comments-${this.prNumber}.json`;
+    const guidelinesFilePath = `/tmp/pr-review/guidelines-${this.prNumber}.json`;
 
     try {
       // ====== Phase 0: レビュー観点の動的取得 ======
@@ -141,13 +143,20 @@ export class ReviewOrchestrator {
       console.log('📖 Reading review guidelines...');
       const reviewGuidelines = readReviewGuidelines(dynamicGuidelines);
 
-      // ローカルモードの場合、レビュー観点をファイルに保存
+      // レビュー観点をJSON形式に変換
+      const guidelinesJson = parseGuidelinesMarkdown(reviewGuidelines, this.prNumber);
+
+      // レビュー観点を一時ファイルにJSON形式で保存（Claudeが随時参照できるように）
+      await Bun.write(guidelinesFilePath, JSON.stringify(guidelinesJson, null, 2));
+      console.log(`✅ Saved review guidelines (JSON) to ${guidelinesFilePath}`);
+
+      // ローカルモードの場合、レビュー観点をoutputディレクトリにも保存
       const isLocalMode = process.env.LOCAL_MODE === 'true';
       if (isLocalMode) {
-        await this.saveGuidelinesLocally(reviewGuidelines);
+        await this.saveGuidelinesLocally(reviewGuidelines, guidelinesJson);
       }
 
-      // 10. レビュー実施（submit_review内でGitHub投稿）
+      // 10. レビュー実施（submit_all_reviews内でGitHub投稿）
       console.log('');
       console.log('🤖 Starting code review...');
       const reviewer = new PRReviewer(
@@ -155,15 +164,45 @@ export class ReviewOrchestrator {
         headSha,
         this.owner,
         this.repo,
-        this.prNumber
+        this.prNumber,
+        guidelinesFilePath
       );
       await reviewer.review(
         diffFiles,
-        reviewGuidelines
+        guidelinesFilePath
       );
 
-      // 11. 差分一時ファイルをクリーンアップ
+      // 11. ローカルモード: レビュー完了後のguidelinesをoutputディレクトリに保存
+      if (isLocalMode) {
+        try {
+          const updatedGuidelines = await Bun.file(guidelinesFilePath).json();
+          const { dirname, join } = await import('path');
+          const { mkdir } = await import('fs/promises');
+          const { fileURLToPath } = await import('url');
+
+          const __filename = fileURLToPath(import.meta.url);
+          const __dirname = dirname(__filename);
+          const outputDir = join(__dirname, '../output');
+
+          await mkdir(outputDir, { recursive: true });
+
+          const jsonPath = join(outputDir, `pr-${this.prNumber}-guidelines.json`);
+          await Bun.write(jsonPath, JSON.stringify(updatedGuidelines, null, 2));
+
+          console.log(`📝 Updated guidelines (with checked status) saved to: ${jsonPath}`);
+        } catch (error) {
+          console.warn('⚠️  Failed to save updated guidelines to output directory:', error);
+        }
+      }
+
+      // 12. 差分一時ファイルとガイドラインファイルをクリーンアップ
       deleteTempDiffFiles(diffFiles);
+      try {
+        await unlink(guidelinesFilePath);
+        console.log(`🗑️  Cleaned up guidelines file: ${guidelinesFilePath}`);
+      } catch (cleanupError) {
+        console.warn(`⚠️  Failed to cleanup guidelines file: ${guidelinesFilePath}`);
+      }
 
       console.log('');
       console.log('✅ Review process completed successfully!');
@@ -240,7 +279,10 @@ export class ReviewOrchestrator {
   /**
    * ローカルモード: レビュー観点をファイルに保存
    */
-  private async saveGuidelinesLocally(guidelines: string): Promise<void> {
+  private async saveGuidelinesLocally(
+    guidelinesMarkdown: string,
+    guidelinesJson: any
+  ): Promise<void> {
     try {
       const { dirname, join } = await import('path');
       const { mkdir } = await import('fs/promises');
@@ -249,14 +291,20 @@ export class ReviewOrchestrator {
       const __filename = fileURLToPath(import.meta.url);
       const __dirname = dirname(__filename);
       const outputDir = join(__dirname, '../output');
-      const outputPath = join(outputDir, `pr-${this.prNumber}-guidelines.md`);
 
       await mkdir(outputDir, { recursive: true });
 
-      const content = `# PR #${this.prNumber} レビュー観点\n\n${guidelines}`;
-      await Bun.write(outputPath, content);
+      // Markdown形式も保存（人間が読みやすい）
+      const mdPath = join(outputDir, `pr-${this.prNumber}-guidelines.md`);
+      const mdContent = `# PR #${this.prNumber} レビュー観点\n\n${guidelinesMarkdown}`;
+      await Bun.write(mdPath, mdContent);
 
-      console.log(`📝 Review guidelines saved to: ${outputPath}`);
+      // JSON形式も保存（機械処理用）
+      const jsonPath = join(outputDir, `pr-${this.prNumber}-guidelines.json`);
+      await Bun.write(jsonPath, JSON.stringify(guidelinesJson, null, 2));
+
+      console.log(`📝 Review guidelines saved to: ${mdPath}`);
+      console.log(`📝 Review guidelines (JSON) saved to: ${jsonPath}`);
     } catch (error) {
       console.warn('⚠️  Failed to save guidelines to file:', error);
     }

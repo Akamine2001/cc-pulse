@@ -128,43 +128,10 @@ export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: str
 
 /**
  * レビュー結果をMarkdown形式でフォーマット
+ *
+ * サマリーはgenerateSummaryFromTemplateで既に生成済みのため、
+ * そのまま返すのみ
  */
 export function formatReviewAsMarkdown(result: ReviewResult): string {
-  let markdown = '## 📊 検出された問題\n\n';
-
-  // 統計サマリー
-  markdown += `- 🔴 重大: ${result.stats.critical}件\n`;
-  markdown += `- 🟠 重要: ${result.stats.high}件\n`;
-  markdown += `- 🟡 中程度: ${result.stats.medium}件\n`;
-  markdown += `- 🟢 軽微: ${result.stats.low}件\n\n`;
-
-  if (result.issues.length === 0) {
-    markdown += '_問題は検出されませんでした_ ✨\n\n';
-  } else {
-    // 重要度別にグループ化
-    const issuesBySeverity = {
-      critical: result.issues.filter(i => i.severity === 'critical'),
-      high: result.issues.filter(i => i.severity === 'high'),
-      medium: result.issues.filter(i => i.severity === 'medium'),
-      low: result.issues.filter(i => i.severity === 'low')
-    };
-
-    // 重大から順に表示
-    for (const [severity, issues] of Object.entries(issuesBySeverity)) {
-      if (issues.length > 0) {
-        const emoji = getSeverityEmoji(severity as ReviewSeverity);
-        const label = getSeverityLabel(severity as ReviewSeverity);
-        markdown += `### ${emoji} ${label} (${issues.length}件)\n\n`;
-
-        for (const issue of issues) {
-          markdown += formatIssue(issue) + '\n';
-        }
-      }
-    }
-  }
-
-  // 総評
-  markdown += `## 📝 総評\n\n${result.summary}\n`;
-
-  return markdown;
+  return result.summary;
 }

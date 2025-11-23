@@ -3,8 +3,7 @@
  * MCP Server for PR review utilities (TypeScript stdio)
  *
  * Provides tools:
- * - format_review: Format and validate review data before submission
- * - submit_review: Submit the final review result
+ * - submit_review: Submit the final review result with automatic validation
  * - get_comments_for_file: Get existing review comments for a specific file
  */
 
@@ -24,10 +23,21 @@ import { ThreadResolver } from '../../shared/github/thread-resolver';
 import { BOT_SIGNATURE, AI_AGENT_MENTION } from '../../shared/constants';
 
 // Import schemas from shared
-import { ReviewIssueSchema, ReviewStatsSchema, type ReviewComment } from '../shared/schemas';
+import {
+  ReviewIssueSchema,
+  ReviewStatsSchema,
+  SubmitAllReviewsInputSchema,
+  type ReviewComment,
+  type ReviewIssue,
+  type CategoryComment
+} from '../shared/schemas';
+import type { GuidelinesFile } from '../shared/guidelines-types';
 
 // Global storage for existing comments (indexed by file_path)
 const commentsByFile = new Map<string, ReviewComment[]>();
+
+// Review issues buffer
+const reviewIssuesBuffer: ReviewIssue[] = [];
 
 // GitHub clients (initialized from environment variables)
 let octokit: Octokit | null = null;
@@ -38,22 +48,52 @@ let prAuthor: string = '';
 let headSha: string = '';
 let owner: string = '';
 let repo: string = '';
+let guidelinesFilePath: string = '';
 
-// Input schemas
-const FormatReviewInputSchema = z.object({
-  issues: z.array(ReviewIssueSchema),
-  summary: z.string(),
-  stats: ReviewStatsSchema
-});
+// Guidelines state (loaded from JSON file)
+let guidelinesData: GuidelinesFile | null = null;
 
+// Input schema
 const SubmitReviewInputSchema = z.object({
   issues: z.array(ReviewIssueSchema),
   summary: z.string(),
   stats: ReviewStatsSchema
 });
 
-type FormatReviewInput = z.infer<typeof FormatReviewInputSchema>;
 type SubmitReviewInput = z.infer<typeof SubmitReviewInputSchema>;
+
+/**
+ * サマリーを生成
+ *
+ * @param summaryComment 全体の総評
+ * @param categoryComments カテゴリ別の評価コメント
+ * @param issues レビュー問題リスト
+ * @returns フォーマット済みサマリー
+ */
+function generateSummaryFromTemplate(
+  summaryComment: string,
+  categoryComments: CategoryComment[],
+  issues: ReviewIssue[]
+): string {
+  let summary = `**総評**\n${summaryComment}\n\n`;
+
+  summary += `**主な指摘**\n`;
+
+  // カテゴリごとの件数を集計
+  const categoryCount = new Map<string, number>();
+  for (const issue of issues) {
+    const count = categoryCount.get(issue.category) || 0;
+    categoryCount.set(issue.category, count + 1);
+  }
+
+  // カテゴリコメントと件数を組み合わせて出力
+  for (const { category, comment } of categoryComments) {
+    const count = categoryCount.get(category) || 0;
+    summary += `- ${category}: ${count}件 - ${comment}\n`;
+  }
+
+  return summary;
+}
 
 /**
  * Initialize existing comments from JSON file
@@ -93,6 +133,7 @@ function initializeGitHubClients() {
   const prNumberStr = process.env.PR_NUMBER;
   prAuthor = process.env.PR_AUTHOR || '';
   headSha = process.env.HEAD_SHA || '';
+  guidelinesFilePath = process.env.GUIDELINES_FILE_PATH || '';
   const isLocalMode = process.env.LOCAL_MODE === 'true';
 
   // prNumberは必ず設定（ローカルモードでも使用する）
@@ -116,6 +157,41 @@ function initializeGitHubClients() {
   console.error('[MCP] GitHub clients initialized');
 }
 
+/**
+ * Initialize guidelines from JSON file
+ */
+async function initializeGuidelines() {
+  if (!guidelinesFilePath || !existsSync(guidelinesFilePath)) {
+    console.error('[MCP-ReviewUtil] No guidelines file found:', guidelinesFilePath);
+    return;
+  }
+
+  try {
+    guidelinesData = await Bun.file(guidelinesFilePath).json();
+    console.error(`[MCP-ReviewUtil] Loaded ${guidelinesData?.guidelines.length || 0} guidelines from ${guidelinesFilePath}`);
+  } catch (error) {
+    console.error('[MCP-ReviewUtil] Failed to load guidelines:', error);
+  }
+}
+
+/**
+ * Save guidelines back to JSON file
+ */
+async function saveGuidelines() {
+  if (!guidelinesData || !guidelinesFilePath) {
+    console.error('[MCP-ReviewUtil] Cannot save: no data or file path');
+    return;
+  }
+
+  try {
+    await Bun.write(guidelinesFilePath, JSON.stringify(guidelinesData, null, 2));
+    console.error(`[MCP-ReviewUtil] Saved guidelines to ${guidelinesFilePath}`);
+  } catch (error) {
+    console.error('[MCP-ReviewUtil] Failed to save guidelines:', error);
+    throw error;
+  }
+}
+
 // Create MCP server
 const server = new Server(
   {
@@ -134,14 +210,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: 'format_review',
-        description: 'Format and validate review data before submission. Call this with your review data to validate the format before calling submit_review.',
-        inputSchema: zodToJsonSchema(FormatReviewInputSchema, { $refStrategy: 'none' })
+        name: 'add_review_comment',
+        description: 'Add a review issue to buffer (does not post to GitHub yet). Use this for each issue found during review.',
+        inputSchema: zodToJsonSchema(ReviewIssueSchema, { $refStrategy: 'none' })
       },
       {
-        name: 'submit_review',
-        description: 'Submit the final review result. ONLY call this after format_review succeeds.',
-        inputSchema: zodToJsonSchema(SubmitReviewInputSchema, { $refStrategy: 'none' })
+        name: 'submit_all_reviews',
+        description: 'Submit all buffered review issues to GitHub with overall comment and category assessments. Call this once at the end after all guidelines are checked.',
+        inputSchema: zodToJsonSchema(SubmitAllReviewsInputSchema, { $refStrategy: 'none' })
       },
       {
         name: 'get_comments_for_file',
@@ -183,6 +259,38 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ['comment_id', 'action', 'reasoning']
         }
+      },
+      {
+        name: 'get_unchecked_guideline',
+        description: 'Get one unchecked guideline. Returns null if all guidelines are checked.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
+      {
+        name: 'mark_checked',
+        description: 'Mark a guideline as checked',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'number',
+              description: 'Guideline ID to mark as checked'
+            }
+          },
+          required: ['id']
+        }
+      },
+      {
+        name: 'get_all_guidelines',
+        description: 'Get all guidelines with their current status',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
       }
     ] as Tool[]
   };
@@ -192,64 +300,52 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  if (name === 'format_review') {
-    const input = FormatReviewInputSchema.parse(args);
+  if (name === 'add_review_comment') {
+    const issue = ReviewIssueSchema.parse(args);
 
-    // Validate stats consistency
-    const actualStats = {
-      total_issues: input.issues.length,
-      critical: input.issues.filter(i => i.severity === 'critical').length,
-      high: input.issues.filter(i => i.severity === 'high').length,
-      medium: input.issues.filter(i => i.severity === 'medium').length,
-      low: input.issues.filter(i => i.severity === 'low').length
-    };
+    // バッファに追加
+    reviewIssuesBuffer.push(issue);
 
-    const statsMatch =
-      actualStats.total_issues === input.stats.total_issues &&
-      actualStats.critical === input.stats.critical &&
-      actualStats.high === input.stats.high &&
-      actualStats.medium === input.stats.medium &&
-      actualStats.low === input.stats.low;
+    console.error(`[MCP] Added review issue to buffer: ${issue.category} (${issue.severity})`);
+    console.error(`[MCP] Buffer size: ${reviewIssuesBuffer.length} issues`);
 
-    if (!statsMatch) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `⚠️ Stats mismatch detected!\n\nExpected: ${JSON.stringify(input.stats)}\nActual: ${JSON.stringify(actualStats)}\n\nPlease correct the stats and try again.`
-          }
-        ]
-      };
-    }
-
-    // Validation passed
     return {
       content: [
         {
           type: 'text',
-          text: `✅ Review data validated successfully!\n\nFormatted review (${input.issues.length} issues):\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}\n\n✅ Validation passed! Now call submit_review with this exact data.`
+          text: `✅ Review issue added to buffer. Total buffered: ${reviewIssuesBuffer.length}`
         }
       ]
     };
   }
 
-  if (name === 'submit_review') {
-    const input = SubmitReviewInputSchema.parse(args);
+  if (name === 'submit_all_reviews') {
+    // Zodスキーマでパース
+    const input = SubmitAllReviewsInputSchema.parse(args);
 
-    // Stats validation (same as format_review)
-    const actualStats = {
-      total_issues: input.issues.length,
-      critical: input.issues.filter(i => i.severity === 'critical').length,
-      high: input.issues.filter(i => i.severity === 'high').length,
-      medium: input.issues.filter(i => i.severity === 'medium').length,
-      low: input.issues.filter(i => i.severity === 'low').length
+    // 統計を自動計算
+    const stats = {
+      total_issues: reviewIssuesBuffer.length,
+      critical: reviewIssuesBuffer.filter(i => i.severity === 'critical').length,
+      high: reviewIssuesBuffer.filter(i => i.severity === 'high').length,
+      medium: reviewIssuesBuffer.filter(i => i.severity === 'medium').length,
+      low: reviewIssuesBuffer.filter(i => i.severity === 'low').length
     };
+
+    // サマリーを生成
+    const summary = generateSummaryFromTemplate(
+      input.summary_comment,
+      input.category_comments,
+      reviewIssuesBuffer
+    );
 
     const reviewResult = {
-      issues: input.issues,
-      summary: input.summary,
-      stats: input.stats
+      issues: reviewIssuesBuffer,
+      summary,
+      stats
     };
+
+    console.error(`[MCP] Submitting all reviews: ${reviewIssuesBuffer.length} issues`);
 
     // ローカルモードのチェックを最優先（GitHubクライアント不要）
     const isLocalMode = process.env.LOCAL_MODE === 'true';
@@ -278,10 +374,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         );
 
         let fullMarkdown = `# PR #${prNumber} 自動レビュー結果\n\n`;
-        fullMarkdown += `## 📊 サマリー\n\n${reviewMarkdown}\n\n`;
+        fullMarkdown += `## 📊 サマリー（PRコメント）\n\n`;
+        fullMarkdown += `> **GitHub投稿先**: PRの会話タブに通常のコメントとして投稿されます\n\n`;
+        fullMarkdown += `${reviewMarkdown}\n\n`;
 
         if (inlineIssues.length > 0) {
-          fullMarkdown += `---\n\n## 💬 インラインコメント\n\n`;
+          fullMarkdown += `---\n\n## 💬 インラインコメント（PR Reviewコメント）\n\n`;
+          fullMarkdown += `> **GitHub投稿先**: 差分ビューの各行にインラインで投稿されます（Files changedタブ）\n\n`;
 
           // ファイルごとにグループ化
           const byFile = new Map<string, typeof inlineIssues>();
@@ -306,7 +405,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (outOfDiffIssues.length > 0) {
-          fullMarkdown += `---\n\n## ⚠️ 差分外ファイルへの指摘\n\n`;
+          fullMarkdown += `---\n\n## ⚠️ 差分外ファイルへの指摘（PRコメント）\n\n`;
+          fullMarkdown += `> **GitHub投稿先**: PRの会話タブに通常のコメントとして投稿されます\n\n`;
           fullMarkdown += `以下のファイルはPR差分に含まれていませんが、関連する問題が見つかりました。\n\n`;
 
           for (const issue of outOfDiffIssues) {
@@ -334,11 +434,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         console.error(`[MCP] Review saved to: ${outputPath}`);
 
+        // バッファをクリア
+        reviewIssuesBuffer.length = 0;
+        console.error(`[MCP] Review buffer cleared`);
+
         return {
           content: [
             {
               type: 'text',
-              text: `✅ Review saved to file (LOCAL_MODE).\n\nFile: ${outputPath}\n\nTotal issues: ${actualStats.total_issues}\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}`
+              text: `✅ Review saved to file (LOCAL_MODE).\n\nFile: ${outputPath}\n\nTotal issues: ${stats.total_issues}\n- Critical: ${stats.critical}\n- High: ${stats.high}\n- Medium: ${stats.medium}\n- Low: ${stats.low}`
             }
           ]
         };
@@ -364,7 +468,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [
           {
             type: 'text',
-            text: `⚠️ Review result validated but not posted to GitHub (clients not initialized).\n\nTotal issues: ${actualStats.total_issues}\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}`
+            text: `⚠️ Review result validated but not posted to GitHub (clients not initialized).\n\nTotal issues: ${stats.total_issues}\n- Critical: ${stats.critical}\n- High: ${stats.high}\n- Medium: ${stats.medium}\n- Low: ${stats.low}`
           }
         ]
       };
@@ -376,7 +480,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [
           {
             type: 'text',
-            text: `⚠️ Review result validated but not posted to GitHub (HEAD_SHA missing).\n\nTotal issues: ${actualStats.total_issues}`
+            text: `⚠️ Review result validated but not posted to GitHub (HEAD_SHA missing).\n\nTotal issues: ${stats.total_issues}`
           }
         ]
       };
@@ -405,11 +509,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const reviewMarkdown = formatReviewAsMarkdown(reviewResult);
       await postReviewSummaryComment(prClient, prNumber, reviewMarkdown);
 
+      // バッファをクリア
+      reviewIssuesBuffer.length = 0;
+      console.error(`[MCP] Review buffer cleared`);
+
       return {
         content: [
           {
             type: 'text',
-            text: `✅ Review submitted and posted to GitHub successfully.\n\nTotal issues: ${actualStats.total_issues}\n- Critical: ${actualStats.critical}\n- High: ${actualStats.high}\n- Medium: ${actualStats.medium}\n- Low: ${actualStats.low}`
+            text: `✅ Review submitted and posted to GitHub successfully.\n\nTotal issues: ${stats.total_issues}\n- Critical: ${stats.critical}\n- High: ${stats.high}\n- Medium: ${stats.medium}\n- Low: ${stats.low}`
           }
         ]
       };
@@ -549,6 +657,127 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
+  if (name === 'get_unchecked_guideline') {
+    console.error('[MCP-ReviewUtil] Processing get_unchecked_guideline...');
+
+    if (!guidelinesData) {
+      console.error('[MCP-ReviewUtil] ERROR: guidelinesData is null');
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(null)
+          }
+        ]
+      };
+    }
+
+    console.error(`[MCP-ReviewUtil] Total guidelines: ${guidelinesData.guidelines.length}`);
+    console.error(`[MCP-ReviewUtil] Checked count: ${guidelinesData.guidelines.filter(g => g.checked).length}`);
+
+    // 最初の未チェック観点を取得
+    const unchecked = guidelinesData.guidelines.find(g => !g.checked);
+
+    if (!unchecked) {
+      console.error('[MCP-ReviewUtil] All guidelines are checked');
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(null)
+          }
+        ]
+      };
+    }
+
+    console.error(`[MCP-ReviewUtil] Returning unchecked guideline: ID ${unchecked.id}`);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(unchecked, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === 'mark_checked') {
+    console.error('[MCP-ReviewUtil] Processing mark_checked...');
+    const { id } = args as { id: number };
+    console.error(`[MCP-ReviewUtil] Marking guideline ID: ${id}`);
+
+    if (!guidelinesData) {
+      console.error('[MCP-ReviewUtil] ERROR: guidelinesData is null');
+      return {
+        content: [
+          {
+            type: 'text',
+            text: '❌ Guidelines data not loaded'
+          }
+        ],
+        isError: true
+      };
+    }
+
+    // 該当観点を探してcheckedをtrueに
+    const guideline = guidelinesData.guidelines.find(g => g.id === id);
+
+    if (!guideline) {
+      console.error(`[MCP-ReviewUtil] ERROR: Guideline ID ${id} not found`);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Guideline ID ${id} not found`
+          }
+        ],
+        isError: true
+      };
+    }
+
+    console.error(`[MCP-ReviewUtil] Found guideline: ${guideline.rule.substring(0, 50)}...`);
+    guideline.checked = true;
+
+    // ファイルに保存
+    console.error(`[MCP-ReviewUtil] Saving to file: ${guidelinesFilePath}`);
+    await saveGuidelines();
+
+    const remaining = guidelinesData.guidelines.filter(g => !g.checked).length;
+    console.error(`[MCP-ReviewUtil] Marked guideline ${id} as checked. Remaining: ${remaining}`);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ Guideline ${id} marked as checked. Remaining unchecked: ${remaining}`
+        }
+      ]
+    };
+  }
+
+  if (name === 'get_all_guidelines') {
+    if (!guidelinesData) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ guidelines: [] })
+          }
+        ]
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(guidelinesData, null, 2)
+        }
+      ]
+    };
+  }
+
   throw new Error(`Unknown tool: ${name}`);
 });
 
@@ -559,6 +788,9 @@ async function main() {
 
   // Initialize GitHub clients
   initializeGitHubClients();
+
+  // Initialize guidelines from JSON file
+  await initializeGuidelines();
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

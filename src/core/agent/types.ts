@@ -1,8 +1,8 @@
-import type { StdioMcpServer as ClaudeStdioMcpServer } from '../../../tools/shared/claude/agent';
+import type { StdioMcpServer as ClaudeStdioMcpServer } from '../../../tools/shared/claude/claude-agent';
 import type { ExecutionStats, FinalNewsItem } from '../../schemas/news-schemas';
 
 /**
- * MCPサーバー設定 (tools/shared/claude/agent.ts を参考)
+ * MCPサーバー設定 (tools/shared/claude/claude-agent.ts を参考)
  */
 export type StdioMcpServer = ClaudeStdioMcpServer;
 

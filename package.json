@@ -49,7 +49,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.5",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.50",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "chalk": "^5.6.2",
     "commander": "^14.0.1",

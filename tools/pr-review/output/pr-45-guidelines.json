@@ -1,0 +1,154 @@
+{
+  "pr_number": 45,
+  "base_description": "**目的**: すべてのPRで必ず確認すべき基本的な観点\n\n---",
+  "guidelines": [
+    {
+      "id": 1,
+      "category": "ビジネスルール",
+      "file": "unknown",
+      "verification_type": "codebase_check",
+      "rule": "McpStdioServerConfig型のargs必須性について、SDKの型定義（オプショナル）と実装（必須として使用）の矛盾が解決されているか",
+      "check_method": "mcp__serena__read_file",
+      "reason": "SDKの型定義と実装パターンの不一致により、実行時エラーが発生する可能性",
+      "checked": true
+    },
+    {
+      "id": 2,
+      "category": "ビジネスルール",
+      "file": "unknown",
+      "verification_type": "codebase_check",
+      "rule": "SDKMessage型が正しく使用され、message.message.contentへのアクセスパターンが維持されているか",
+      "check_method": "mcp__serena__read_file",
+      "reason": "型変更後もストリームメッセージ処理ロジックが正常に動作する必要がある",
+      "checked": true
+    },
+    {
+      "id": 3,
+      "category": "ビジネスルール",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "createOutputToolsServer()とcreateEmbeddingMcpServer()の返却型の違いが適切に扱われているか",
+      "check_method": "diff",
+      "reason": "McpSdkServerConfigWithInstance と McpStdioServerConfig は異なる型だが、両方とも McpServerConfig として扱える",
+      "checked": true
+    },
+    {
+      "id": 4,
+      "category": "実装方針",
+      "file": "types.ts",
+      "verification_type": "codebase_check",
+      "rule": "types.tsから自前のStreamMessage, ContentBlock, TextBlock, ToolUseBlock, ToolResultBlock型定義が削除されているか",
+      "check_method": "mcp__serena__read_file",
+      "expected_pattern": "NOT:StreamMessage",
+      "reason": "Issue #43「自前のStreamMessage型定義を削除」",
+      "checked": true
+    },
+    {
+      "id": 5,
+      "category": "実装方針",
+      "file": "types.ts",
+      "verification_type": "codebase_check",
+      "rule": "types.tsから自前のStdioMcpServer型のエイリアス定義が削除され、SDKのMcpStdioServerConfigが直接使用されているか",
+      "check_method": "mcp__serena__read_file",
+      "expected_pattern": "NOT:StdioMcpServer",
+      "reason": "Issue #43「自前のStdioMcpServer型定義を削除」",
+      "checked": true
+    },
+    {
+      "id": 6,
+      "category": "実装方針",
+      "file": "NewsAgentWrapper.ts",
+      "verification_type": "diff_check",
+      "rule": "NewsAgentWrapper.tsのimport文でSDKMessageがimportされているか",
+      "check_method": "diff",
+      "reason": "Issue #43「SDKの型（SDKMessage, McpStdioServerConfig等）を直接使用」",
+      "checked": true
+    },
+    {
+      "id": 7,
+      "category": "実装方針",
+      "file": "NewsAgentWrapper.ts",
+      "verification_type": "codebase_check",
+      "rule": "NewsAgentWrapper.tsのprocessStreamMessageメソッドの引数型がAsyncIterable<SDKMessage>に変更されているか",
+      "check_method": "mcp__serena__read_file",
+      "expected_pattern": "AsyncIterable<SDKMessage>",
+      "reason": "Issue #43「processStreamMessage(message: StreamMessage, ...) → processStreamMessage(message: SDKMessage, ...)」",
+      "checked": true
+    },
+    {
+      "id": 8,
+      "category": "実装方針",
+      "file": "NewsOrchestrator.ts",
+      "verification_type": "codebase_check",
+      "rule": "NewsOrchestrator.tsのmcpServers型がRecord<string, McpServerConfig>に変更されているか（McpStdioServerConfigではなくMcpServerConfigを使用）",
+      "check_method": "mcp__serena__read_file",
+      "expected_pattern": "mcpServers.*Record<string,\\s*McpServerConfig>",
+      "reason": "McpSdkServerConfigWithInstanceとMcpStdioServerConfigの両方を受け入れるため、共通の親型McpServerConfigを使用する必要がある",
+      "checked": true
+    },
+    {
+      "id": 9,
+      "category": "実装方針",
+      "file": "index.ts",
+      "verification_type": "codebase_check",
+      "rule": "index.tsのexport文からStdioMcpServerが削除され、必要に応じてMcpStdioServerConfigまたはMcpServerConfigがexportされているか",
+      "check_method": "mcp__serena__read_file",
+      "expected_pattern": "NOT:StdioMcpServer",
+      "reason": "Issue #43「自前のStdioMcpServer型定義を削除」",
+      "checked": true
+    },
+    {
+      "id": 10,
+      "category": "実装方針",
+      "file": "agent.ts",
+      "verification_type": "codebase_check",
+      "rule": "tools/shared/claude/agent.tsと同じ型チェックパターン（message?.type === 'assistant' && message.message?.content）が維持されているか",
+      "check_method": "mcp__serena__read_file",
+      "expected_pattern": "message\\?\\.type.*===.*['\"]assistant['\"]",
+      "reason": "Issue #43「tools/shared/claude/agent.tsと同じパターンに統一」",
+      "checked": true
+    },
+    {
+      "id": 11,
+      "category": "実装方針",
+      "file": "unknown",
+      "verification_type": "codebase_check",
+      "rule": "block.type === 'tool_use' と block.type === 'text' の型チェックパターンが維持されているか",
+      "check_method": "mcp__serena__read_file",
+      "expected_pattern": "block\\.type.*===.*(tool_use|text)",
+      "reason": "SDKの型変更後もコンテンツブロックの処理ロジックが正常に動作する必要がある",
+      "checked": true
+    },
+    {
+      "id": 12,
+      "category": "親Issueに書いていない確認観点",
+      "file": "unknown",
+      "verification_type": "codebase_check",
+      "rule": "NewsAgentConfig型のmcpServers定義がRecord<string, McpServerConfig>に変更されているか",
+      "check_method": "mcp__serena__read_file",
+      "expected_pattern": "mcpServers.*Record<string,\\s*McpServerConfig>",
+      "reason": "createOutputToolsServer()とcreateEmbeddingMcpServer()の両方の返却型を受け入れるため",
+      "checked": true
+    },
+    {
+      "id": 13,
+      "category": "親Issueに書いていない確認観点",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "block as any などの型アサーションが削除または最小化されているか",
+      "check_method": "diff",
+      "reason": "Issue #43「型アサーション（as）が最小限」。ただし、参考実装でも使用されているため、完全削除は不要かもしれない",
+      "checked": true
+    },
+    {
+      "id": 14,
+      "category": "親Issueに書いていない確認観点",
+      "file": "unknown",
+      "verification_type": "codebase_check",
+      "rule": "SDKの型構造について説明するコメントが追加されているか",
+      "check_method": "mcp__serena__read_file",
+      "reason": "Issue #43「コメントでSDKの型構造について説明されている」",
+      "checked": true
+    }
+  ]
+}

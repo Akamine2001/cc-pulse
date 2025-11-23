@@ -5,7 +5,8 @@
 
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { ClaudeAgent } from '../../shared/claude/agent';
+import { ClaudeAgent } from '../../shared/claude/claude-agent';
+import { getClaudeCodeExecutablePath } from '../../../src/utils/paths';
 import type { GuidelinesOutput } from '../shared/schemas';
 import { existsSync } from 'fs';
 
@@ -19,13 +20,28 @@ export class IssueAnalyzer {
   constructor(issueNumber: number) {
     this.issueNumber = issueNumber;
 
+    // Claude Code CLIパスを取得
+    const claudePath = getClaudeCodeExecutablePath();
+    if (!claudePath) {
+      throw new Error(
+        'Claude Code CLI not found. ' +
+        'Please install it or set CLAUDE_PATH environment variable.'
+      );
+    }
+
     this.agent = new ClaudeAgent({
+      systemPrompt: '', // Issue分析はプロンプトで指示
+      model: 'claude-sonnet-4-5',
+      maxThinkingTokens: 10000, // Extended Thinking有効化
+      pathToClaudeCodeExecutable: claudePath,
       mcpServers: {
         'feature-review': {
+          type: 'stdio',
           command: 'bun',
           args: ['run', `${__dirname}/../mcp/feature-review-mcp-server.ts`]
         },
         'serena': {
+          type: 'stdio',
           command: 'uvx',
           args: [
             '--from',
@@ -79,20 +95,36 @@ export class IssueAnalyzer {
     // MCPツールの出力をキャプチャする変数
     let capturedGuidelines: GuidelinesOutput | null = null;
 
-    try {
-      // Claude Agent実行（onToolUseでMCPツールの出力をキャプチャ）
-      await this.agent.query({
-        prompt,
-        onToolUse: (toolName: string, input: any) => {
-          console.log(`[Analyzer] Tool called: ${toolName}`);
+    // onToolUseコールバックを使用してMCPツールの出力をキャプチャ
+    const agentWithCallback = new ClaudeAgent({
+      systemPrompt: '', // Issue分析はプロンプトで指示
+      model: 'claude-sonnet-4-5',
+      maxThinkingTokens: 10000, // Extended Thinking有効化
+      pathToClaudeCodeExecutable: getClaudeCodeExecutablePath()!,
+      mcpServers: this.agent['options'].mcpServers,
+      allowedTools: this.agent['options'].allowedTools,
+      maxTurns: this.agent['options'].maxTurns,
+      onText: (text) => {
+        console.log(`[Text] ${text}`);
+      },
+      onThinking: (thinking) => {
+        console.log(`[Thinking] ${thinking}`);
+      },
+      onToolUse: (toolName: string, input: any) => {
+        console.log(`[Tool] ${toolName}`);
+        console.log(`[Tool Input]`, JSON.stringify(input, null, 2));
 
-          // create_review_guidelinesが呼ばれた時、そのinputをキャプチャ
-          if (toolName === 'mcp__feature-review__create_review_guidelines') {
-            console.log(`[Analyzer] Capturing guidelines from MCP tool...`);
-            capturedGuidelines = input as GuidelinesOutput;
-          }
+        // create_review_guidelinesが呼ばれた時、そのinputをキャプチャ
+        if (toolName === 'mcp__feature-review__create_review_guidelines') {
+          console.log(`[Analyzer] Capturing guidelines from MCP tool...`);
+          capturedGuidelines = input as GuidelinesOutput;
         }
-      });
+      }
+    });
+
+    try {
+      // Claude Agent実行
+      await agentWithCallback.query(prompt);
 
       console.log(`[Analyzer] Claude Agent execution completed`);
 

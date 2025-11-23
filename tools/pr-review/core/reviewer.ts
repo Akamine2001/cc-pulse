@@ -5,7 +5,8 @@
 
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { ClaudeAgent } from '../../shared/claude/agent';
+import { ClaudeAgent } from '../../shared/claude/claude-agent';
+import { getClaudeCodeExecutablePath } from '../../../src/utils/paths';
 import { loadReviewPrompt, type FileDiff } from '../lib/files';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,11 +20,36 @@ export class PRReviewer {
     headSha: string,
     owner: string,
     repo: string,
-    prNumber: number
+    prNumber: number,
+    guidelinesFilePath: string
   ) {
+    // Claude Code CLIパスを取得
+    const claudePath = getClaudeCodeExecutablePath();
+    if (!claudePath) {
+      throw new Error(
+        'Claude Code CLI not found. ' +
+        'Please install it or set CLAUDE_PATH environment variable.'
+      );
+    }
+
     this.agent = new ClaudeAgent({
+      systemPrompt: '', // PRレビューはプロンプトで指示
+      model: 'claude-sonnet-4-5',
+      maxThinkingTokens: 10000, // Extended Thinking有効化
+      pathToClaudeCodeExecutable: claudePath,
+      onText: (text) => {
+        console.log(`[Text] ${text}`);
+      },
+      onThinking: (thinking) => {
+        console.log(`[Thinking] ${thinking}`);
+      },
+      onToolUse: (toolName, input) => {
+        console.log(`[Tool] ${toolName}`);
+        console.log(`[Tool Input]`, JSON.stringify(input, null, 2));
+      },
       mcpServers: {
         'review-util': {
+          type: 'stdio',
           command: 'bun',
           args: ['run', `${__dirname}/../mcp/review-util-mcp-server.ts`],
           env: {
@@ -32,10 +58,12 @@ export class PRReviewer {
             GITHUB_TOKEN: process.env.GITHUB_TOKEN || '',
             GITHUB_OWNER: owner,
             GITHUB_REPO: repo,
-            PR_NUMBER: String(prNumber)
+            PR_NUMBER: String(prNumber),
+            GUIDELINES_FILE_PATH: guidelinesFilePath
           }
         },
         'serena': {
+          type: 'stdio',
           command: 'uvx',
           args: [
             '--from',
@@ -51,9 +79,12 @@ export class PRReviewer {
       },
       allowedTools: [
         'Read',  // 差分ファイル読み込み用
-        'mcp__review-util__format_review',
-        'mcp__review-util__submit_review',
+        'mcp__review-util__add_review_comment',
+        'mcp__review-util__submit_all_reviews',
         'mcp__review-util__get_comments_for_file',
+        'mcp__review-util__get_unchecked_guideline',
+        'mcp__review-util__mark_checked',
+        'mcp__review-util__get_all_guidelines',
         // Serena MCP tools - All default tools
         'mcp__serena__activate_project',
         'mcp__serena__check_onboarding_performed',
@@ -99,21 +130,19 @@ export class PRReviewer {
    * PRの差分をレビューしてGitHubにコメント投稿
    *
    * @param diffFiles 差分ファイル情報の配列
-   * @param reviewGuidelines レビュー観点
+   * @param guidelinesFilePath レビュー観点ファイルのパス
    */
   async review(
     diffFiles: FileDiff[],
-    reviewGuidelines: string
+    guidelinesFilePath: string
   ): Promise<void> {
     // プロンプトを生成（ファイル単位の差分リストを渡す）
-    const promptText = this.buildPrompt(diffFiles, reviewGuidelines);
+    const promptText = this.buildPrompt(diffFiles, guidelinesFilePath);
 
     console.log('🤖 Starting Claude code review with Agent SDK...');
 
     // ClaudeAgentでレビューを実行（submit_review内でGitHub投稿）
-    await this.agent.query({
-      prompt: promptText
-    });
+    await this.agent.query(promptText);
 
     console.log('✅ Review agent execution completed');
   }
@@ -123,9 +152,9 @@ export class PRReviewer {
    */
   private buildPrompt(
     fileDiffs: FileDiff[],
-    reviewGuidelines: string
+    guidelinesFilePath: string
   ): string {
     // 外部プロンプトMDファイルから読み込み（差分はファイルリストで指定）
-    return loadReviewPrompt(fileDiffs, reviewGuidelines);
+    return loadReviewPrompt(fileDiffs, guidelinesFilePath);
   }
 }
