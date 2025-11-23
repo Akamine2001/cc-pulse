@@ -130,23 +130,20 @@ export class JulesApiClient {
   async startAutomatedImplementation(
     prompt: string,
     issueNumber: number,
-    subIssueNumber: number
+    subIssueNumber: number | undefined,
+    branch?: string
   ): Promise<JulesSessionResponse> {
     console.log('🚀 Calling Jules API to start automated implementation...');
 
-    // 1. Sourceを取得
     const sourceName = await this.getSource();
+    const startingBranch = branch || await this.getDefaultBranch();
 
-    // 2. デフォルトブランチを取得
-    const defaultBranch = await this.getDefaultBranch();
-
-    // 3. Session作成リクエスト
     const requestBody = {
       prompt: prompt,
       sourceContext: {
         source: sourceName,
         githubRepoContext: {
-          startingBranch: defaultBranch,
+          startingBranch: startingBranch,
         },
       },
       automationMode: 'AUTO_CREATE_PR',
@@ -192,6 +189,50 @@ export class JulesApiClient {
       throw new Error(`Invalid session URL format: ${sessionUrl}`);
     }
     return match[2];
+  }
+
+  /**
+   * Finds the Jules session URL for a given pull request number.
+   * Note: This method lists all sessions and then fetches details for each one individually.
+   * This could be inefficient and slow if the number of sessions becomes large.
+   */
+  async findSessionForPR(prNumber: number): Promise<string | null> {
+    const sourceName = await this.getSource();
+    const response = await fetch(`${JULES_API_BASE}/sessions?filter=source="${sourceName}"`, {
+      method: 'GET',
+      headers: { 'X-Goog-Api-Key': this.apiKey },
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Failed to list sessions: ${response.status} - ${errorBody}`);
+    }
+
+    const { sessions } = await response.json();
+    if (!sessions) return null;
+
+    for (const session of sessions) {
+      const sessionDetails = await this.getSessionDetails(session.name);
+      if (sessionDetails.pullRequests?.some((pr: { number: number }) => pr.number === prNumber)) {
+        return session.url;
+      }
+    }
+
+    return null;
+  }
+
+  private async getSessionDetails(sessionName: string): Promise<any> {
+    const response = await fetch(`${JULES_API_BASE}/${sessionName}`, {
+      method: 'GET',
+      headers: { 'X-Goog-Api-Key': this.apiKey },
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Failed to get session details: ${response.status} - ${errorBody}`);
+    }
+
+    return await response.json();
   }
 
   /**

@@ -87,4 +87,18 @@ export class IssueClient {
       body
     });
   }
+
+  async findSubIssues(parentIssueNumber: number): Promise<IssueInfo[]> {
+    const query = `repo:${this.owner}/${this.repo} is:issue is:open "in:body \\"<!-- parent-issue: #${parentIssueNumber} -->\\""`;
+    const { data } = await this.octokit.rest.search.issuesAndPullRequests({
+        q: query,
+    });
+
+    return data.items.map(issue => ({
+        number: issue.number,
+        title: issue.title,
+        body: issue.body || '',
+        html_url: issue.html_url,
+    }));
+  }
 }

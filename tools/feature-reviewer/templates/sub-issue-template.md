@@ -1,3 +1,4 @@
+<!-- parent-issue: #{{PARENT_ISSUE_NUMBER}} -->
 > このIssueは #{{PARENT_ISSUE_NUMBER}} の実装時に参照するレビュー・テスト観点です
 
 ---

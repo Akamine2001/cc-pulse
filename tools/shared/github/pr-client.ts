@@ -181,4 +181,33 @@ export class PRClient {
       body
     });
   }
+
+  async postSummaryComment(prNumber: number, summary: string): Promise<void> {
+    const signature = '<!-- pr-summary-comment -->';
+    const body = `${summary}\n${signature}`;
+
+    const comments = await this.octokit.rest.issues.listComments({
+      owner: this.owner,
+      repo: this.repo,
+      issue_number: prNumber,
+    });
+
+    const existingComment = comments.data.find(c => c.body?.includes(signature));
+
+    if (existingComment) {
+      await this.octokit.rest.issues.updateComment({
+        owner: this.owner,
+        repo: this.repo,
+        comment_id: existingComment.id,
+        body,
+      });
+    } else {
+      await this.octokit.rest.issues.createComment({
+        owner: this.owner,
+        repo: this.repo,
+        issue_number: prNumber,
+        body,
+      });
+    }
+  }
 }

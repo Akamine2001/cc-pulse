@@ -9,6 +9,7 @@ import { GuidelinesExtractor } from '../../shared/github/guidelines-extractor';
 import { JulesApiClient } from '../../feature-reviewer/core/jules-client';
 import { ThreadResolver } from '../../shared/github/thread-resolver';
 import { AI_AGENT_MENTION } from '../../shared/constants';
+import { PRClient } from '../../shared/github/pr-client';
 
 interface CommentWithThread {
   id: number;
@@ -46,24 +47,18 @@ export class JulesCommentHandler {
 
     try {
       // 1. Julesセッション情報を取得
-      console.log('🔍 Extracting Jules session info...');
-      const sessionInfo = await this.guidelinesExtractor.extractJulesSessionFromPR(
-        this.prNumber
-      );
+      console.log('🔍 Finding associated Jules session for PR #${this.prNumber}...');
+      this.julesClient = new JulesApiClient(this.apiKey, this.owner, this.repo);
+      const sessionUrl = await this.julesClient.findSessionForPR(this.prNumber);
 
-      if (!sessionInfo || !sessionInfo.julesSessionName) {
+      if (!sessionUrl) {
         console.log('⚠️  No Jules session found for this PR');
-        console.log('');
-        console.log('💡 Jules session is created when a feature issue is opened.');
-        console.log('   Make sure the PR is linked to an issue with a Jules session.');
+        await this.postNoSessionFoundComment();
         return;
       }
 
-      console.log(`✅ Found Jules session: ${sessionInfo.julesSessionName}`);
+      console.log(`✅ Found Jules session: ${sessionUrl}`);
       console.log('');
-
-      // JulesApiClient初期化
-      this.julesClient = new JulesApiClient(this.apiKey, this.owner, this.repo);
 
       // 2. @julesコメントを収集
       console.log(`📝 Collecting @${AI_AGENT_MENTION} comments...`);
@@ -80,13 +75,13 @@ export class JulesCommentHandler {
       // 3. コメントをJulesセッションに送信
       console.log('📤 Sending comments to Jules session...');
       await this.sendCommentsToSession(
-        sessionInfo.julesSessionUrl!,
+        sessionUrl,
         julesComments
       );
 
       console.log('');
       console.log('✅ All comments sent to Jules successfully!');
-      console.log(`   Session URL: ${sessionInfo.julesSessionUrl}`);
+      console.log(`   Session URL: ${sessionUrl}`);
 
     } catch (error) {
       console.error('❌ Jules Comment Handler failed:', error);
@@ -208,4 +203,10 @@ Comment URL: ${comment.url}
 Comment ID: ${comment.id}
 `;
   }
+
+  private async postNoSessionFoundComment(): Promise<void> {
+    const prClient = new PRClient(this.octokit, this.owner, this.repo);
+    const summary = `ℹ️ Julesセッション: 見つかりませんでした（@julesコメントは送信されません）`;
+    await prClient.postSummaryComment(this.prNumber, summary);
+    }
 }
