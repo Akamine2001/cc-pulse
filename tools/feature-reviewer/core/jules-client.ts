@@ -208,8 +208,10 @@ export class JulesApiClient {
    * This could be inefficient and slow if the number of sessions becomes large.
    */
   async findSessionForPR(prNumber: number): Promise<string | null> {
-    const sourceName = await this.getSource();
-    const response = await fetch(`${JULES_API_BASE}/sessions?filter=source="${sourceName}"`, {
+    console.log(`🔍 Searching for Jules session that created PR #${prNumber}...`);
+
+    // 1. 全セッションを取得（filterパラメータは未サポートのため使用しない）
+    const response = await fetch(`${JULES_API_BASE}/sessions`, {
       method: 'GET',
       headers: { 'X-Goog-Api-Key': this.apiKey },
     });
@@ -220,15 +222,30 @@ export class JulesApiClient {
     }
 
     const { sessions } = await response.json();
-    if (!sessions) return null;
+    if (!sessions || sessions.length === 0) {
+      console.log('  ℹ️  No sessions found');
+      return null;
+    }
 
+    console.log(`  ℹ️  Found ${sessions.length} session(s), checking each...`);
+
+    // 2. 各セッションの詳細を取得してPR番号を確認
     for (const session of sessions) {
-      const sessionDetails = await this.getSessionDetails(session.name);
-      if (sessionDetails.pullRequests?.some((pr: { number: number }) => pr.number === prNumber)) {
-        return session.url;
+      try {
+        const sessionDetails = await this.getSessionDetails(session.name);
+
+        if (sessionDetails.pullRequests?.some((pr: { number: number }) => pr.number === prNumber)) {
+          console.log(`  ✅ Found matching session: ${session.name}`);
+          return sessionDetails.url || session.url;
+        }
+      } catch (error) {
+        // 個別セッションの取得失敗は無視して続行
+        console.warn(`  ⚠️  Failed to get details for session ${session.name}:`, error);
+        continue;
       }
     }
 
+    console.log(`  ⚠️  No session found for PR #${prNumber}`);
     return null;
   }
 
