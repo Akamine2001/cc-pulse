@@ -6,7 +6,7 @@
 import type { Octokit } from 'octokit';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { IssueClient } from '../shared/github/issue-client';
+import { IssueClient, type IssueInfo } from '../shared/github/issue-client';
 import { JulesApiClient } from '../feature-reviewer/core/jules-client';
 import { retry } from '../shared/retry';
 
@@ -71,7 +71,7 @@ export class JulesSessionCreator {
     return options;
   }
 
-  private async resolveIssues(): Promise<{ parentIssue: any; subIssue?: any }> {
+  private async resolveIssues(): Promise<{ parentIssue: IssueInfo; subIssue?: IssueInfo }> {
     const currentIssue = await this.issueClient.getIssue(this.issueNumber);
 
     const parentIssueNumber = this.extractParentIssueNumber(currentIssue);
@@ -85,7 +85,7 @@ export class JulesSessionCreator {
     return { parentIssue: currentIssue, subIssue: subIssues[0] };
   }
 
-  private extractParentIssueNumber(issue: any): number | null {
+  private extractParentIssueNumber(issue: IssueInfo): number | null {
     const match = issue.body?.match(/<!-- parent-issue: #(\d+) -->/);
     if (match && match[1]) {
         return parseInt(match[1]);
@@ -93,7 +93,7 @@ export class JulesSessionCreator {
     return null;
   }
 
-  private createPrompt(parentIssue: any, subIssue: any, options: CommandOptions): string {
+  private createPrompt(parentIssue: IssueInfo, subIssue: IssueInfo | undefined, options: CommandOptions): string {
     let prompt = `# Issue #${parentIssue.number}: ${parentIssue.title}\n\n${parentIssue.body}`;
     if (subIssue) {
       prompt += `\n\n---\n\n# Sub-Issue #${subIssue.number}: ${subIssue.title}\n\n${subIssue.body}`;

@@ -9,7 +9,6 @@ import { GuidelinesExtractor } from '../../shared/github/guidelines-extractor';
 import { JulesApiClient } from '../../feature-reviewer/core/jules-client';
 import { ThreadResolver } from '../../shared/github/thread-resolver';
 import { AI_AGENT_MENTION } from '../../shared/constants';
-import { PRClient } from '../../shared/github/pr-client';
 
 interface CommentWithThread {
   id: number;
@@ -47,13 +46,13 @@ export class JulesCommentHandler {
 
     try {
       // 1. Julesセッション情報を取得
-      console.log('🔍 Finding associated Jules session for PR #${this.prNumber}...');
+      console.log(`🔍 Finding associated Jules session for PR #${this.prNumber}...`);
       this.julesClient = new JulesApiClient(this.apiKey, this.owner, this.repo);
       const sessionUrl = await this.julesClient.findSessionForPR(this.prNumber);
 
       if (!sessionUrl) {
         console.log('⚠️  No Jules session found for this PR');
-        await this.postNoSessionFoundComment();
+        console.log('ℹ️  @jules comments will not be sent (session info already in summary comment)');
         return;
       }
 
@@ -203,10 +202,4 @@ Comment URL: ${comment.url}
 Comment ID: ${comment.id}
 `;
   }
-
-  private async postNoSessionFoundComment(): Promise<void> {
-    const prClient = new PRClient(this.octokit, this.owner, this.repo);
-    const summary = `ℹ️ Julesセッション: 見つかりませんでした（@julesコメントは送信されません）`;
-    await prClient.postSummaryComment(this.prNumber, summary);
-    }
 }

@@ -137,6 +137,32 @@ export class ReviewOrchestrator {
         console.log('✅ No previous comments to resolve');
       }
 
+      // ====== Phase 1.5: Julesセッション情報取得 ======
+
+      console.log('');
+      console.log('🔍 Finding Jules session for this PR...');
+      let julesSessionFound = false;
+
+      if (this.julesApiKey) {
+        try {
+          const sessionInfo = await guidelinesExtractor.extractJulesSessionFromPR(
+            this.prNumber,
+            this.julesApiKey
+          );
+
+          if (sessionInfo && sessionInfo.julesSessionName) {
+            julesSessionFound = true;
+            console.log(`✅ Found Jules session: ${sessionInfo.julesSessionName}`);
+          } else {
+            console.log('⚠️  No Jules session found for this PR');
+          }
+        } catch (error) {
+          console.warn('⚠️  Failed to find Jules session:', error);
+        }
+      } else {
+        console.log('ℹ️  Skipping Jules session lookup (JULES_API_KEY not set)');
+      }
+
       // ====== Phase 2: 新規レビュー実施 ======
 
       console.log('');
@@ -165,7 +191,8 @@ export class ReviewOrchestrator {
         this.owner,
         this.repo,
         this.prNumber,
-        guidelinesFilePath
+        guidelinesFilePath,
+        julesSessionFound
       );
       await reviewer.review(
         diffFiles,

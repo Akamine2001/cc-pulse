@@ -29,6 +29,17 @@ const SourcesListResponseSchema = z.object({
 });
 
 /**
+ * Session Details APIレスポンススキーマ
+ */
+const SessionDetailsSchema = z.object({
+  name: z.string(),
+  url: z.string().optional(),
+  pullRequests: z.array(z.object({
+    number: z.number(),
+  })).optional(),
+});
+
+/**
  * Session作成APIレスポンススキーマ
  */
 const JulesSessionResponseSchema = z.object({
@@ -221,7 +232,7 @@ export class JulesApiClient {
     return null;
   }
 
-  private async getSessionDetails(sessionName: string): Promise<any> {
+  private async getSessionDetails(sessionName: string): Promise<z.infer<typeof SessionDetailsSchema>> {
     const response = await fetch(`${JULES_API_BASE}/${sessionName}`, {
       method: 'GET',
       headers: { 'X-Goog-Api-Key': this.apiKey },
@@ -232,7 +243,8 @@ export class JulesApiClient {
       throw new Error(`Failed to get session details: ${response.status} - ${errorBody}`);
     }
 
-    return await response.json();
+    const data = await response.json();
+    return SessionDetailsSchema.parse(data);
   }
 
   /**

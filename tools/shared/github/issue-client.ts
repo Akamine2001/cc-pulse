@@ -89,7 +89,7 @@ export class IssueClient {
   }
 
   async findSubIssues(parentIssueNumber: number): Promise<IssueInfo[]> {
-    const query = `repo:${this.owner}/${this.repo} is:issue is:open "in:body \\"<!-- parent-issue: #${parentIssueNumber} -->\\""`;
+    const query = `repo:${this.owner}/${this.repo} is:issue is:open in:body "<!-- parent-issue: #${parentIssueNumber} -->"`;
     const { data } = await this.octokit.rest.search.issuesAndPullRequests({
         q: query,
     });

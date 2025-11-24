@@ -21,7 +21,8 @@ export class PRReviewer {
     owner: string,
     repo: string,
     prNumber: number,
-    guidelinesFilePath: string
+    guidelinesFilePath: string,
+    julesSessionFound: boolean
   ) {
     // Claude Code CLIパスを取得
     const claudePath = getClaudeCodeExecutablePath();
@@ -59,7 +60,8 @@ export class PRReviewer {
             GITHUB_OWNER: owner,
             GITHUB_REPO: repo,
             PR_NUMBER: String(prNumber),
-            GUIDELINES_FILE_PATH: guidelinesFilePath
+            GUIDELINES_FILE_PATH: guidelinesFilePath,
+            JULES_SESSION_FOUND: String(julesSessionFound)
           }
         },
         'serena': {

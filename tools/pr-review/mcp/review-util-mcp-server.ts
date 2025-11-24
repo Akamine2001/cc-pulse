@@ -333,11 +333,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
 
     // サマリーを生成
-    const summary = generateSummaryFromTemplate(
+    let summary = generateSummaryFromTemplate(
       input.summary_comment,
       input.category_comments,
       reviewIssuesBuffer
     );
+
+    // Julesセッション情報が見つからなかった場合、サマリーに追記
+    const julesSessionFound = process.env.JULES_SESSION_FOUND === 'true';
+    if (!julesSessionFound) {
+      summary += '\n\nℹ️ Julesセッション: 見つかりませんでした（@julesコメントは送信されません）';
+    }
 
     const reviewResult = {
       issues: reviewIssuesBuffer,
