@@ -10,6 +10,8 @@ macOS向け自動ニュース収集CLIツール。Claude Agent SDKを統合し�
 - WebUIでの記事閲覧・フィードバック
 - launchdによる定期実行スケジューラー
 - SQLiteによる記事データ管理
+- **PR自動レビュー**: GitHub ActionsによるAIコードレビュー
+- **Feature Reviewer**: Issue作成時のレビュー観点自動生成
 
 ## 技術スタック
 
@@ -21,6 +23,7 @@ macOS向け自動ニュース収集CLIツール。Claude Agent SDKを統合し�
 - **データベース**: SQLite (bun:sqlite)
 - **Python環境**: uv (MCPサーバー管理用)
 - **プラットフォーム**: macOS (launchd対応)
+- **CI/CD**: GitHub Actions
 
 ## コーディング規約
 
@@ -131,43 +134,149 @@ cc-pulse/
 ├── src/
 │   ├── cli.ts              # CLIエントリーポイント (Commander.js)
 │   ├── commands/           # サブコマンド実装
-│   │   ├── setup.ts        # 初期セットアップ
-│   │   ├── schedule.ts     # スケジューラー設定
+│   │   ├── config.ts       # 設定管理コマンド
 │   │   ├── fetch.ts        # ニュース収集実行
+│   │   ├── schedule.ts     # スケジューラー設定
 │   │   ├── serve.ts        # WebUIサーバー
+│   │   ├── setup.ts        # 初期セットアップ
 │   │   ├── status.ts       # ステータス表示
 │   │   └── uninstall.ts    # アンインストール
+│   ├── constants/          # 定数定義
+│   │   └── agent-names.ts  # Agentの名称定義
 │   ├── core/               # コアロジック
-│   │   ├── agent.ts        # Claude Agent統合
+│   │   ├── agent.ts        # Claude Agent統合（エントリーポイント）
+│   │   ├── agent/          # Agent実装詳細
+│   │   │   ├── index.ts    # エクスポート
+│   │   │   ├── errors.ts   # カスタムエラー定義
+│   │   │   ├── types.ts    # 型定義
+│   │   │   ├── NewsOrchestrator.ts    # 複数Agent統合管理
+│   │   │   ├── NewsAgentWrapper.ts    # Agent共通ラッパー
+│   │   │   ├── NewsResultBuilder.ts   # 結果構築
+│   │   │   └── ResultCaptor.ts        # 結果キャプチャ
 │   │   ├── config.ts       # 設定管理
-│   │   ├── scheduler.ts    # launchd連携
+│   │   ├── embedding-mcp-server.ts    # Embedding MCP連携
 │   │   ├── notification.ts # macOS通知
-│   │   └── *-mcp-server.ts # MCPサーバー管理
+│   │   ├── output-tools-server.ts     # Output Tools MCP
+│   │   ├── prompts/        # Agentプロンプト定義
+│   │   │   ├── index.ts    # エクスポート
+│   │   │   ├── types.ts    # プロンプト型定義
+│   │   │   ├── master.ts   # マスターAgent
+│   │   │   ├── news-collector.ts      # 収集Agent
+│   │   │   ├── aggregator.ts          # 集約Agent
+│   │   │   ├── duplicate-checker.ts   # 重複チェックAgent
+│   │   │   └── translator.ts          # 翻訳Agent
+│   │   └── scheduler.ts    # launchd連携
+│   ├── schemas/            # Zodスキーマ
+│   │   ├── language-codes.ts # 言語コード定義
+│   │   └── news-schemas.ts   # ニュースデータ型
 │   ├── templates/          # WebUI
 │   │   ├── index.html      # Reactアプリエントリー
-│   │   ├── App.tsx         # メインコンポーネント
-│   │   └── styles.css      # Tailwind CSS
-│   ├── utils/              # ユーティリティ
-│   │   ├── paths.ts        # パス管理
-│   │   ├── logger.ts       # ロギング
-│   │   └── CCPulseDatetime.ts # 日時処理
-│   └── schemas/            # Zodスキーマ
-│       ├── news-schemas.ts # ニュースデータ型
-│       └── language-codes.ts # 言語コード定義
+│   │   ├── frontend.tsx    # Reactコンポーネント
+│   │   ├── styles.css      # Tailwind CSS (入力)
+│   │   └── styles.built.css # ビルド済みCSS
+│   └── utils/              # ユーティリティ
+│       ├── CCPulseDatetime.ts # 日時処理
+│       ├── logger.ts       # ロギング
+│       └── paths.ts        # パス管理
+├── tools/                  # CI/CD・レビューツール
+│   ├── pr-review/          # PRレビューシステム
+│   │   ├── index.ts        # エントリーポイント
+│   │   ├── core/           # コアロジック
+│   │   │   ├── orchestrator.ts        # レビューオーケストレータ
+│   │   │   ├── reviewer.ts            # コードレビュー実行
+│   │   │   ├── comment-resolver.ts    # コメント解決
+│   │   │   └── jules-comment-handler.ts # Jules連携
+│   │   ├── lib/            # ユーティリティ
+│   │   │   ├── files.ts    # ファイル操作
+│   │   │   ├── github.ts   # GitHub API
+│   │   │   ├── guidelines-parser.ts   # ガイドライン解析
+│   │   │   └── parsers.ts  # パーサー
+│   │   ├── mcp/            # MCPサーバー
+│   │   │   └── review-util-mcp-server.ts
+│   │   ├── shared/         # 共通定義
+│   │   │   ├── env.ts      # 環境変数
+│   │   │   ├── formatter.ts # フォーマッタ
+│   │   │   ├── guidelines-types.ts    # ガイドライン型
+│   │   │   ├── schemas.ts  # Zodスキーマ
+│   │   │   └── types.ts    # 型定義
+│   │   └── send-jules-comments.ts     # Jules通知
+│   ├── feature-reviewer/   # Feature Reviewerシステム
+│   │   ├── index.ts        # エントリーポイント
+│   │   ├── core/           # コアロジック
+│   │   │   ├── analyzer.ts # Issue分析
+│   │   │   ├── jules-client.ts        # Jules APIクライアント
+│   │   │   └── orchestrator.ts        # オーケストレータ
+│   │   ├── lib/            # ユーティリティ
+│   │   │   └── markdown-converter.ts
+│   │   ├── mcp/            # MCPサーバー
+│   │   │   └── feature-review-mcp-server.ts
+│   │   ├── shared/         # 共通定義
+│   │   │   ├── schemas.ts  # Zodスキーマ
+│   │   │   └── types.ts    # 型定義
+│   │   └── test-*.ts       # テストファイル
+│   ├── jules/              # Julesツール
+│   │   └── pr.ts           # PRコメント操作
+│   └── shared/             # tools共通ユーティリティ
+│       ├── claude/         # Claude Agent共通
+│       │   ├── claude-agent.ts        # Agent生成
+│       │   └── sanitize.ts # サニタイズ
+│       ├── constants.ts    # 共通定数
+│       └── github/         # GitHub共通
+│           ├── guidelines-extractor.ts # ガイドライン抽出
+│           ├── issue-client.ts        # Issue API
+│           ├── pr-client.ts           # PR API
+│           └── thread-resolver.ts     # スレッド解決
 ├── mcp/                    # Python MCPサーバー
-│   └── embedding_server.py # Embedding機能
+│   ├── server.py           # MCPサーバーエントリー
+│   ├── db.py               # SQLite操作
+│   ├── embedding.py        # EmbeddingGemmaラッパー
+│   ├── batch_embed.py      # バッチ埋め込み
+│   ├── download_model.py   # モデルダウンロード
+│   ├── generate_sample_data.py # サンプルデータ生成
+│   └── pyproject.toml      # Python依存関係
 ├── scripts/                # ビルド・リリーススクリプト
 │   ├── build-release.sh    # .appバンドル作成
-│   └── create-installer.sh # .pkg作成
-└── tests/                  # テストファイル
+│   ├── create-installer.sh # .pkg作成
+│   ├── install-gh.sh       # gh CLI インストール
+│   └── setup-jules.sh      # Jules VM用セットアップ
+├── swift/                  # Swift関連（Login Items）
+├── docs/                   # ドキュメント
+│   ├── AGENTS.md           # AI Agent向けドキュメント
+│   ├── DEVELOPMENT.md      # 開発フロー詳細
+│   ├── MCP_SERVER_GUIDELINES.md # MCPサーバーガイド
+│   ├── NOTARIZATION.md     # 公証について
+│   └── RELEASE_PROCESS.md  # リリース手順
+├── tests/                  # テストファイル
+├── .github/
+│   └── workflows/          # GitHub Actions
+│       ├── pr-review.yml   # PR自動レビュー
+│       ├── feature-reviewer.yml # Feature Reviewer
+│       └── close-sub-issues.yml # Issue自動クローズ
+├── .claude/                # Claude Code設定
+│   └── settings.json
+├── .mcp.json               # MCP設定
+├── AGENTS.md               # 外部Agent向けドキュメント
+├── CLAUDE.md               # Claude Code向けドキュメント（本ファイル）
+└── package.json            # Node.js依存関係
 ```
 
 ### 主要コンポーネント
 
-#### 1. Agent (`src/core/agent.ts`)
-- Claude Agent SDKによるニュース収集・要約
-- MCPサーバー（embedding, output-tools）との連携
-- 記事データのJSON出力 + SQLite保存
+#### 1. News Agent System (`src/core/agent/`)
+
+ニュース収集・処理を担当するマルチAgent構成:
+
+- **NewsOrchestrator**: 複数のAgentを統合管理
+- **NewsAgentWrapper**: Agent共通のラッパー
+- **NewsResultBuilder**: 収集結果の構築
+- **ResultCaptor**: MCP Tool結果のキャプチャ
+
+プロンプト定義（`src/core/prompts/`）:
+- **master**: 全体統括
+- **news-collector**: 記事収集
+- **aggregator**: 結果集約
+- **duplicate-checker**: 重複検知
+- **translator**: 翻訳
 
 #### 2. Scheduler (`src/core/scheduler.ts`)
 - launchdによる定期実行設定
@@ -180,9 +289,40 @@ cc-pulse/
 - SQLiteからのデータ取得
 
 #### 4. MCP Servers
-- **embedding-mcp-server**: Sentence Transformersによるベクトル検索
+- **embedding-mcp-server**: Sentence Transformersによるベクトル検索（Python）
 - **output-tools-server**: ファイル出力・データベース保存
-- **serena-mcp-server**: LSPベースのセマンティックコード解析（GitHub Actions PRレビュー用）
+- **serena-mcp-server**: LSPベースのセマンティックコード解析（CI用）
+- **review-util-mcp-server**: PRレビュー用ユーティリティ
+- **feature-review-mcp-server**: Feature Review用ユーティリティ
+
+#### 5. PR Review System (`tools/pr-review/`)
+
+GitHub Actions上で動作するAI PRレビューシステム:
+
+- **orchestrator.ts**: レビューフロー全体を管理
+- **reviewer.ts**: Claude Agentによるコードレビュー実行
+- **comment-resolver.ts**: 修正済みコメントの自動解決
+- **jules-comment-handler.ts**: Google Julesとの連携
+
+ワークフロー（`.github/workflows/pr-review.yml`）:
+1. PR作成/更新時にトリガー
+2. 差分取得 → Claude Agentでレビュー
+3. インラインコメント投稿
+4. Julesセッションへの通知
+
+#### 6. Feature Reviewer System (`tools/feature-reviewer/`)
+
+Issue作成時にレビュー観点・テスト観点を自動生成:
+
+- **analyzer.ts**: Issue内容の分析
+- **jules-client.ts**: Jules API連携
+- **orchestrator.ts**: 全体フロー管理
+
+ワークフロー（`.github/workflows/feature-reviewer.yml`）:
+1. Issue作成時にトリガー
+2. Issue内容を分析
+3. レビュー観点・テスト観点を生成
+4. Issueにコメントとして投稿
 
 ### データフロー
 
@@ -248,6 +388,41 @@ cc-pulse --version
 - GitHub Releaseの最終チェック
 
 **詳細は `docs/DEVELOPMENT.md` を参照してください。**
+
+## CI/CDツール
+
+### PRレビュー (`bun run review:pr`)
+
+PR差分をAIでレビュー:
+
+```bash
+# ローカル実行
+bun run review:local
+
+# GitHub Actions（自動）
+# PR作成・更新時に自動実行
+```
+
+### Feature Reviewer (`bun run feature-review:local`)
+
+Issue分析・レビュー観点生成:
+
+```bash
+# ローカル実行
+bash tools/feature-reviewer/local-feature.sh
+```
+
+### Julesツール
+
+Google Jules用のPRコメント操作:
+
+```bash
+# @julesコメント取得
+bun run pr:get-comments --pr <PR番号>
+
+# コメント返信
+bun run pr:reply --pr <PR番号> --comment-id <ID> --body "返信内容"
+```
 
 ## Bun固有の実装ガイドライン
 
@@ -320,6 +495,8 @@ sudo rm -rf /Applications/cc-pulse.app
 |-------|------|------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | ◯ | Claude Pro/MAX OAuth token |
 | `ANTHROPIC_API_KEY` | △ | Claude API Key（OAuth未使用時） |
+| `GITHUB_TOKEN` | CI | GitHub API トークン |
+| `JULES_API_KEY` | CI | Google Jules API キー |
 
 **取得方法**:
 ```bash
@@ -328,6 +505,33 @@ claude setup-token
 
 # API Key
 # https://console.anthropic.com/ から取得
+```
+
+## npm scripts 一覧
+
+```bash
+# 開発
+bun run dev              # TypeScriptソース直接実行
+bun run dev:css          # Tailwind CSS ウォッチ
+
+# ビルド
+bun run build            # 両アーキテクチャ向けビルド
+bun run build:arm64      # arm64向けビルド
+bun run build:x64        # x64向けビルド
+bun run build:css        # Tailwind CSSビルド
+
+# 品質チェック
+bun run lint             # TypeScript型チェック
+bun test                 # テスト実行
+
+# レビューツール
+bun run review:pr        # PRレビュー実行
+bun run review:local     # ローカルPRレビュー
+bun run feature-review:local  # ローカルFeature Review
+
+# Julesツール
+bun run pr:get-comments  # Julesコメント取得
+bun run pr:reply         # コメント返信
 ```
 
 ## トラブルシューティング
@@ -346,6 +550,10 @@ claude setup-token
    - 原因: Hardened Runtimeが有効
    - 解決: ビルドスクリプトから`--options runtime`を削除
 
+4. **PRレビューがタイムアウト**
+   - 原因: 大きな差分、または複雑なコード
+   - 解決: PR差分を小さく分割
+
 ### デバッグ方法
 
 ```bash
@@ -359,9 +567,31 @@ sqlite3 ~/.cc-pulse/articles.db "SELECT * FROM articles LIMIT 5;"
 launchctl list | grep cc-pulse
 ```
 
+## MCP設定
+
+プロジェクトルートの`.mcp.json`で設定:
+
+```json
+{
+  "mcpServers": {
+    "serena": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/oraios/serena", "serena-mcp-server"]
+    },
+    "sequential-thinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    }
+  }
+}
+```
+
 ## 参考リンク
 
 - [Bun Documentation](https://bun.sh/docs)
 - [Claude Agent SDK](https://github.com/anthropics/anthropic-sdk-typescript/tree/main/packages/claude-agent-sdk)
 - [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
 - [Serena MCP Server](https://github.com/oraios/serena)
+- [Google Jules](https://jules.google/docs)
