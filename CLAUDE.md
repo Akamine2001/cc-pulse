@@ -249,6 +249,53 @@ cc-pulse --version
 
 **詳細は `docs/DEVELOPMENT.md` を参照してください。**
 
+## GitHub Issue操作
+
+### 環境別の使用ツール
+
+| 環境 | 使用ツール |
+|------|-----------|
+| **Claude Code on the web** | `scripts/github-issues.sh` |
+| **ローカル環境** | `gh` (GitHub CLI) |
+
+### Claude Code on the web環境
+
+Web環境では`gh`コマンドが利用できないため、専用スクリプトを使用します。
+
+```bash
+# Issue一覧を表示
+./scripts/github-issues.sh list
+
+# Issue詳細を表示
+./scripts/github-issues.sh get <issue番号>
+
+# Issueを新規作成
+./scripts/github-issues.sh create -t "タイトル" -b "本文" [-l "ラベル"]
+
+# Issueを更新
+./scripts/github-issues.sh update <issue番号> [-t "タイトル"] [-b "本文"] [-s open|closed]
+```
+
+**必要な環境変数**: `GH_TOKEN` または `GITHUB_TOKEN`
+
+### ローカル環境
+
+ローカル環境では`gh`コマンドを使用してください。
+
+```bash
+# Issue一覧
+gh issue list
+
+# Issue詳細
+gh issue view <issue番号>
+
+# Issue作成
+gh issue create -t "タイトル" -b "本文"
+
+# Issueクローズ
+gh issue close <issue番号>
+```
+
 ## Bun固有の実装ガイドライン
 
 ### 基本ルール
