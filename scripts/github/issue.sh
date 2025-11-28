@@ -5,6 +5,15 @@
 
 set -e
 
+_check_for_help() {
+    for arg in "$@"; do
+        if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Issue一覧を取得
 list_issues() {
   echo -e "${BLUE}Issue一覧を取得中... ($(get_repo_info))${NC}"
@@ -35,7 +44,7 @@ list_issues() {
 
 # Issueの詳細を取得
 get_issue() {
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    if _check_for_help "$@"; then
         echo "Usage: $0 issue get <issue-number>"
         return 0
     fi
@@ -80,7 +89,7 @@ get_issue() {
 
 # Issueを新規作成
 create_issue() {
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    if _check_for_help "$@"; then
         echo "Usage: $0 issue create -t <title> [-b <body>] [-l <labels>]"
         return 0
     fi
@@ -147,7 +156,7 @@ create_issue() {
 
 # Issueを更新
 update_issue() {
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    if _check_for_help "$@"; then
         echo "Usage: $0 issue update <issue-number> [-t <title>] [-b <body>] [-s <state>]"
         return 0
     fi

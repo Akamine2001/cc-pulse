@@ -5,6 +5,15 @@
 
 set -e
 
+_check_for_help() {
+    for arg in "$@"; do
+        if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # PR一覧を取得
 list_prs() {
     echo -e "${BLUE}PR一覧を取得中... ($(get_repo_info))${NC}"
@@ -34,7 +43,7 @@ list_prs() {
 
 # PRの詳細を取得
 get_pr() {
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    if _check_for_help "$@"; then
         echo "Usage: $0 pr get <pr-number>"
         return 0
     fi
@@ -84,7 +93,7 @@ get_pr() {
 
 # PRの差分を表示
 pr_diff() {
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    if _check_for_help "$@"; then
         echo "Usage: $0 pr diff <pr-number>"
         return 0
     fi
@@ -99,7 +108,7 @@ pr_diff() {
 
 # PRのチェック状況を表示
 pr_checks() {
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    if _check_for_help "$@"; then
         echo "Usage: $0 pr checks <pr-number>"
         return 0
     fi
@@ -154,7 +163,7 @@ pr_checks() {
 
 # PRを新規作成
 create_pr() {
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    if _check_for_help "$@"; then
         echo "Usage: $0 pr create -t <title> [-b <body>] [-B <base>] [-H <head>]"
         return 0
     fi
@@ -200,7 +209,7 @@ create_pr() {
 
 # PRにレビューを追加
 add_pr_review() {
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    if _check_for_help "$@"; then
         echo "Usage: $0 pr review <pr-number> <approve|request-changes|comment> [-b <body>]"
         return 0
     fi
@@ -242,7 +251,7 @@ add_pr_review() {
 
 # PRをクローズ
 close_pr() {
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    if _check_for_help "$@"; then
         echo "Usage: $0 pr close <pr-number>"
         return 0
     fi
