@@ -3,6 +3,8 @@
 # GitHub Client - Issue Functions
 #
 
+set -e
+
 # Issue一覧を取得
 list_issues() {
   echo -e "${BLUE}Issue一覧を取得中... ($(get_repo_info))${NC}"
@@ -33,6 +35,10 @@ list_issues() {
 
 # Issueの詳細を取得
 get_issue() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo "Usage: $0 issue get <issue-number>"
+        return 0
+    fi
   local issue_number="$1"
 
   if [ -z "$issue_number" ]; then
@@ -74,6 +80,10 @@ get_issue() {
 
 # Issueを新規作成
 create_issue() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo "Usage: $0 issue create -t <title> [-b <body>] [-l <labels>]"
+        return 0
+    fi
   local title=""
   local body=""
   local labels=""
@@ -137,6 +147,10 @@ create_issue() {
 
 # Issueを更新
 update_issue() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo "Usage: $0 issue update <issue-number> [-t <title>] [-b <body>] [-s <state>]"
+        return 0
+    fi
   local issue_number="$1"
   shift
 
@@ -209,4 +223,17 @@ update_issue() {
   echo -e "${CYAN}タイトル:${NC} ${updated_title}"
   echo -e "${CYAN}状態:${NC}     ${updated_state}"
   echo -e "${CYAN}URL:${NC}      ${updated_url}"
+}
+
+
+show_issue_help() {
+    echo "Usage: $0 issue <subcommand> [options]"
+    echo ""
+    echo "Subcommands:"
+    echo "  list                          List open issues"
+    echo "  get <number>                  Get details of an issue"
+    echo "  create -t <title> [-b <body>] [-l <labels>]"
+    echo "                                Create a new issue"
+    echo "  update <number> [-t <title>] [-b <body>] [-s <state>]"
+    echo "                                Update an existing issue"
 }

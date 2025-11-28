@@ -3,6 +3,8 @@
 # GitHub Client - Pull Request Functions
 #
 
+set -e
+
 # PR一覧を取得
 list_prs() {
     echo -e "${BLUE}PR一覧を取得中... ($(get_repo_info))${NC}"
@@ -32,6 +34,10 @@ list_prs() {
 
 # PRの詳細を取得
 get_pr() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo "Usage: $0 pr get <pr-number>"
+        return 0
+    fi
     local pr_number="$1"
     if [ -z "$pr_number" ]; then
         echo -e "${RED}エラー: PR番号を指定してください${NC}" >&2
@@ -78,6 +84,10 @@ get_pr() {
 
 # PRの差分を表示
 pr_diff() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo "Usage: $0 pr diff <pr-number>"
+        return 0
+    fi
     local pr_number="$1"
     if [ -z "$pr_number" ]; then
         echo -e "${RED}エラー: PR番号を指定してください${NC}" >&2
@@ -89,6 +99,10 @@ pr_diff() {
 
 # PRのチェック状況を表示
 pr_checks() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo "Usage: $0 pr checks <pr-number>"
+        return 0
+    fi
     local pr_number="$1"
     if [ -z "$pr_number" ]; then
         echo -e "${RED}エラー: PR番号を指定してください${NC}" >&2
@@ -140,6 +154,10 @@ pr_checks() {
 
 # PRを新規作成
 create_pr() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo "Usage: $0 pr create -t <title> [-b <body>] [-B <base>] [-H <head>]"
+        return 0
+    fi
     local title="" body="" base="main" head
     head=$(git branch --show-current)
 
@@ -182,6 +200,10 @@ create_pr() {
 
 # PRにレビューを追加
 add_pr_review() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo "Usage: $0 pr review <pr-number> <approve|request-changes|comment> [-b <body>]"
+        return 0
+    fi
     local pr_number="$1" event="$2" body=""
     shift 2
 
@@ -220,6 +242,10 @@ add_pr_review() {
 
 # PRをクローズ
 close_pr() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo "Usage: $0 pr close <pr-number>"
+        return 0
+    fi
     local pr_number="$1"
     if [ -z "$pr_number" ]; then
         echo -e "${RED}エラー: PR番号を指定してください${NC}" >&2
@@ -232,4 +258,19 @@ close_pr() {
     call_api "PATCH" "/pulls/${pr_number}" "$payload" > /dev/null
 
     echo -e "${GREEN}PR #${pr_number} をクローズしました${NC}"
+}
+
+show_pr_help() {
+    echo "Usage: $0 pr <subcommand> [options]"
+    echo ""
+    echo "Subcommands:"
+    echo "  list                          List open pull requests"
+    echo "  get <number>                  Get details of a pull request"
+    echo "  diff <number>                 Show the diff of a pull request"
+    echo "  checks <number>               Show the CI/CD checks for a pull request"
+    echo "  create -t <title> [-b <body>] [-B <base>] [-H <head>]"
+    echo "                                Create a new pull request"
+    echo "  review <number> <approve|request-changes|comment> [-b <body>]"
+    echo "                                Add a review to a pull request"
+    echo "  close <number>                Close a pull request"
 }

@@ -38,6 +38,16 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  -h, --help         Show this help message"
+    echo ""
+    echo "Environment Variables:"
+    echo "  GH_TOKEN           GitHub API token (preferred)"
+    echo "  GITHUB_TOKEN       GitHub API token (if GH_TOKEN is not set)"
+    echo "  GITHUB_REPO        Repository in 'owner/repo' format (otherwise detected from git remote)"
+    echo ""
+    echo "Examples:"
+    echo "  $0 issue list"
+    echo "  $0 pr get 123"
+    echo "  $0 issue create -t \"New Feature\" -b \"Details about the feature.\""
 }
 
 main() {
@@ -63,7 +73,16 @@ main() {
                 get) get_issue "$@";;
                 create) create_issue "$@";;
                 update) update_issue "$@";;
-                *) show_help; exit 1;;
+                -h|--help) show_issue_help;;
+                *)
+                    if [[ -z "$subcommand" ]]; then
+                        show_issue_help
+                    else
+                        echo -e "${RED}エラー: 不明なサブコマンド: $subcommand${NC}" >&2
+                        show_issue_help
+                    fi
+                    exit 1
+                    ;;
             esac
             ;;
         pr)
@@ -77,7 +96,16 @@ main() {
                 create) create_pr "$@";;
                 review) add_pr_review "$@";;
                 close) close_pr "$@";;
-                *) show_help; exit 1;;
+                -h|--help) show_pr_help;;
+                *)
+                    if [[ -z "$subcommand" ]]; then
+                        show_pr_help
+                    else
+                        echo -e "${RED}エラー: 不明なサブコマンド: $subcommand${NC}" >&2
+                        show_pr_help
+                    fi
+                    exit 1
+                    ;;
             esac
             ;;
         -h|--help)
