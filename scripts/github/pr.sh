@@ -16,6 +16,10 @@ _check_for_help() {
 
 # PR一覧を取得
 list_prs() {
+    if _check_for_help "$@"; then
+        echo "Usage: $0 pr list"
+        return 0
+    fi
     echo -e "${BLUE}PR一覧を取得中... ($(get_repo_info))${NC}"
     echo ""
 
