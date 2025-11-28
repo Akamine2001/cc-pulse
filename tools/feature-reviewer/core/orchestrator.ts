@@ -62,6 +62,21 @@ export class FeatureReviewOrchestrator {
       console.log(`✅ Issue #${issue.number}: ${issue.title}`);
       console.log('');
 
+      const subIssueTitle = `[レビュー・テスト観点] ${issue.title}`;
+
+      console.log('🔁 Checking for existing sub-issue...');
+      const existingSubIssue = await this.issueClient.findIssueByTitleAndParent(
+        subIssueTitle,
+        issue.number
+      );
+      if (existingSubIssue) {
+        console.log('ℹ️ Existing sub-issue found. Skipping creation.');
+        console.log(
+          `   Issue #${existingSubIssue.number}: ${existingSubIssue.html_url}`
+        );
+        return;
+      }
+
       // ====== Phase 2: Issue分析 ======
       console.log('🔍 Analyzing issue with Claude AI...');
       console.log('   (This may take several minutes)');
@@ -74,7 +89,6 @@ export class FeatureReviewOrchestrator {
       console.log('');
 
       // ====== Phase 3: サブIssue作成 ======
-      const subIssueTitle = `[レビュー・テスト観点] ${issue.title}`;
       const subIssueMarkdown = await convertToSubIssueMarkdown(
         guidelines,
         issue.number,

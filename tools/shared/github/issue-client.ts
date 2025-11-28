@@ -74,6 +74,43 @@ export class IssueClient {
   }
 
   /**
+   * 既存のサブIssueを検索
+   *
+   * @param title 探索するIssueタイトル
+   * @param parentIssueNumber 親Issue番号（本文内の参照を確認）
+   * @returns 見つかったIssue情報。存在しない場合はnull
+   */
+  async findIssueByTitleAndParent(
+    title: string,
+    parentIssueNumber: number
+  ): Promise<IssueInfo | null> {
+    const issues = await this.octokit.paginate(
+      this.octokit.rest.issues.listForRepo,
+      {
+        owner: this.owner,
+        repo: this.repo,
+        state: 'all',
+        per_page: 100
+      }
+    );
+
+    for (const issue of issues) {
+      if ('pull_request' in issue) continue; // PRは除外
+      if (issue.title !== title) continue;
+      if (!issue.body?.includes(`#${parentIssueNumber}`)) continue;
+
+      return {
+        number: issue.number,
+        title: issue.title,
+        body: issue.body || '',
+        html_url: issue.html_url
+      };
+    }
+
+    return null;
+  }
+
+  /**
    * Issueにコメントを投稿
    *
    * @param issueNumber Issue番号
