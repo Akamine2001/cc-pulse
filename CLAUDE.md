@@ -249,13 +249,13 @@ cc-pulse --version
 
 **詳細は `docs/DEVELOPMENT.md` を参照してください。**
 
-## GitHub Issue操作
+## GitHub Issue/PR操作
 
 ### 環境別の使用ツール
 
 | 環境 | 使用ツール |
 |------|-----------|
-| **Claude Code on the web** | `scripts/github-issues.sh` |
+| **Claude Code on the web** | `scripts/github-client.sh` |
 | **ローカル環境** | `gh` (GitHub CLI) |
 
 ### Claude Code on the web環境
@@ -263,17 +263,15 @@ cc-pulse --version
 Web環境では`gh`コマンドが利用できないため、専用スクリプトを使用します。
 
 ```bash
-# Issue一覧を表示
-./scripts/github-issues.sh list
+# Issue操作
+./scripts/github-client.sh issue list
+./scripts/github-client.sh issue get <issue番号>
+./scripts/github-client.sh issue create -t "タイトル" -b "本文"
 
-# Issue詳細を表示
-./scripts/github-issues.sh get <issue番号>
-
-# Issueを新規作成
-./scripts/github-issues.sh create -t "タイトル" -b "本文" [-l "ラベル"]
-
-# Issueを更新
-./scripts/github-issues.sh update <issue番号> [-t "タイトル"] [-b "本文"] [-s open|closed]
+# PR操作
+./scripts/github-client.sh pr list
+./scripts/github-client.sh pr get <pr番号>
+./scripts/github-client.sh pr create -t "タイトル" -b "本文"
 ```
 
 **必要な環境変数**: `GH_TOKEN` または `GITHUB_TOKEN`
