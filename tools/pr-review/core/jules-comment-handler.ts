@@ -143,11 +143,14 @@ export class JulesCommentHandler {
     for (const comment of issueComments.data) {
       if (!comment.body) continue;
 
+      // リアクションがあれば解決済みとみなす（+1リアクションをチェック）
+      const hasResolvedReaction = (comment.reactions?.['+1'] ?? 0) > 0;
+
       allComments.push({
         id: comment.id,
         body: comment.body,
         user: comment.user?.login || 'unknown',
-        isResolved: false, // Issueコメントは常に未解決として扱う
+        isResolved: hasResolvedReaction, // リアクションがあれば解決済み
         url: comment.html_url,
       });
     }
