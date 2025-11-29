@@ -16,10 +16,6 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { existsSync } from 'fs';
-import { Octokit } from 'octokit';
-import { PRClient } from '../../shared/github/pr-client';
-import { ThreadResolver } from '../../shared/github/thread-resolver';
 import { BOT_SIGNATURE, AI_AGENT_MENTION } from '../../shared/constants';
 
 // Import schemas from shared
@@ -27,31 +23,13 @@ import {
   ReviewIssueSchema,
   ReviewStatsSchema,
   SubmitAllReviewsInputSchema,
-  type ReviewComment,
   type ReviewIssue,
   type CategoryComment
 } from '../shared/schemas';
-import type { GuidelinesFile } from '../shared/guidelines-types';
 
-// Global storage for existing comments (indexed by file_path)
-const commentsByFile = new Map<string, ReviewComment[]>();
+import { ReviewContext } from './context/review-context';
 
-// Review issues buffer
-const reviewIssuesBuffer: ReviewIssue[] = [];
-
-// GitHub clients (initialized from environment variables)
-let octokit: Octokit | null = null;
-let prClient: PRClient | null = null;
-let threadResolver: ThreadResolver | null = null;
-let prNumber: number = 0;
-let prAuthor: string = '';
-let headSha: string = '';
-let owner: string = '';
-let repo: string = '';
-let guidelinesFilePath: string = '';
-
-// Guidelines state (loaded from JSON file)
-let guidelinesData: GuidelinesFile | null = null;
+let context: ReviewContext;
 
 // Input schema
 const SubmitReviewInputSchema = z.object({
@@ -59,8 +37,6 @@ const SubmitReviewInputSchema = z.object({
   summary: z.string(),
   stats: ReviewStatsSchema
 });
-
-type SubmitReviewInput = z.infer<typeof SubmitReviewInputSchema>;
 
 /**
  * サマリーを生成
@@ -73,7 +49,7 @@ type SubmitReviewInput = z.infer<typeof SubmitReviewInputSchema>;
 function generateSummaryFromTemplate(
   summaryComment: string,
   categoryComments: CategoryComment[],
-  issues: ReviewIssue[]
+  issues: readonly ReviewIssue[]
 ): string {
   let summary = `**総評**\n${summaryComment}\n\n`;
 
@@ -93,103 +69,6 @@ function generateSummaryFromTemplate(
   }
 
   return summary;
-}
-
-/**
- * Initialize existing comments from JSON file
- * Reads from path specified in EXISTING_COMMENTS_PATH environment variable
- */
-async function initializeComments() {
-  const filePath = process.env.EXISTING_COMMENTS_PATH;
-
-  if (!filePath || !existsSync(filePath)) {
-    console.error('[MCP] No existing comments file found');
-    return;
-  }
-
-  try {
-    const comments: ReviewComment[] = await Bun.file(filePath).json();
-
-    for (const comment of comments) {
-      if (!commentsByFile.has(comment.file_path)) {
-        commentsByFile.set(comment.file_path, []);
-      }
-      commentsByFile.get(comment.file_path)!.push(comment);
-    }
-
-    console.error(`[MCP] Loaded ${comments.length} existing comments from ${filePath}`);
-  } catch (error) {
-    console.error('[MCP] Failed to load existing comments:', error);
-  }
-}
-
-/**
- * Initialize GitHub clients from environment variables
- */
-function initializeGitHubClients() {
-  const token = process.env.GITHUB_TOKEN;
-  owner = process.env.GITHUB_OWNER || '';
-  repo = process.env.GITHUB_REPO || '';
-  const prNumberStr = process.env.PR_NUMBER;
-  prAuthor = process.env.PR_AUTHOR || '';
-  headSha = process.env.HEAD_SHA || '';
-  guidelinesFilePath = process.env.GUIDELINES_FILE_PATH || '';
-  const isLocalMode = process.env.LOCAL_MODE === 'true';
-
-  // prNumberは必ず設定（ローカルモードでも使用する）
-  if (prNumberStr) {
-    prNumber = parseInt(prNumberStr, 10);
-  }
-
-  if (isLocalMode) {
-    console.error('[MCP] Running in LOCAL_MODE - GitHub posting disabled');
-    return;
-  }
-
-  if (!token || !owner || !repo || !prNumberStr) {
-    console.error('[MCP] Missing required environment variables for GitHub API');
-    return;
-  }
-  octokit = new Octokit({ auth: token });
-  prClient = new PRClient(octokit, owner, repo);
-  threadResolver = new ThreadResolver(octokit);
-
-  console.error('[MCP] GitHub clients initialized');
-}
-
-/**
- * Initialize guidelines from JSON file
- */
-async function initializeGuidelines() {
-  if (!guidelinesFilePath || !existsSync(guidelinesFilePath)) {
-    console.error('[MCP-ReviewUtil] No guidelines file found:', guidelinesFilePath);
-    return;
-  }
-
-  try {
-    guidelinesData = await Bun.file(guidelinesFilePath).json();
-    console.error(`[MCP-ReviewUtil] Loaded ${guidelinesData?.guidelines.length || 0} guidelines from ${guidelinesFilePath}`);
-  } catch (error) {
-    console.error('[MCP-ReviewUtil] Failed to load guidelines:', error);
-  }
-}
-
-/**
- * Save guidelines back to JSON file
- */
-async function saveGuidelines() {
-  if (!guidelinesData || !guidelinesFilePath) {
-    console.error('[MCP-ReviewUtil] Cannot save: no data or file path');
-    return;
-  }
-
-  try {
-    await Bun.write(guidelinesFilePath, JSON.stringify(guidelinesData, null, 2));
-    console.error(`[MCP-ReviewUtil] Saved guidelines to ${guidelinesFilePath}`);
-  } catch (error) {
-    console.error('[MCP-ReviewUtil] Failed to save guidelines:', error);
-    throw error;
-  }
 }
 
 // Create MCP server
@@ -304,16 +183,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const issue = ReviewIssueSchema.parse(args);
 
     // バッファに追加
-    reviewIssuesBuffer.push(issue);
+    context.addReviewIssue(issue);
 
     console.error(`[MCP] Added review issue to buffer: ${issue.category} (${issue.severity})`);
-    console.error(`[MCP] Buffer size: ${reviewIssuesBuffer.length} issues`);
+    console.error(`[MCP] Buffer size: ${context.getReviewIssuesCount()} issues`);
 
     return {
       content: [
         {
           type: 'text',
-          text: `✅ Review issue added to buffer. Total buffered: ${reviewIssuesBuffer.length}`
+          text: `✅ Review issue added to buffer. Total buffered: ${context.getReviewIssuesCount()}`
         }
       ]
     };
@@ -322,6 +201,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (name === 'submit_all_reviews') {
     // Zodスキーマでパース
     const input = SubmitAllReviewsInputSchema.parse(args);
+    const reviewIssuesBuffer = context.getReviewIssuesBuffer();
 
     // 統計を自動計算
     const stats = {
@@ -340,13 +220,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     );
 
     // Julesセッション情報が見つからなかった場合、サマリーに追記
-    const julesSessionFound = process.env.JULES_SESSION_FOUND === 'true';
-    if (!julesSessionFound) {
+    if (!context.config.julesSessionFound) {
       summary += '\n\nℹ️ Julesセッション: 見つかりませんでした（julesコメントは送信されません）';
     }
 
     const reviewResult = {
-      issues: reviewIssuesBuffer,
+      issues: [...reviewIssuesBuffer],
       summary,
       stats
     };
@@ -354,14 +233,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     console.error(`[MCP] Submitting all reviews: ${reviewIssuesBuffer.length} issues`);
 
     // ローカルモードのチェックを最優先（GitHubクライアント不要）
-    const isLocalMode = process.env.LOCAL_MODE === 'true';
-
-    if (isLocalMode) {
+    if (context.config.isLocalMode) {
       // ローカルモード: mdファイルに保存
       try {
         console.error('[MCP] LOCAL_MODE detected - saving to file instead of GitHub...');
 
-        const { formatReviewAsMarkdown, formatOutOfDiffComment } = await import('../shared/formatter.js');
+        const { formatReviewAsMarkdown } = await import('../shared/formatter.js');
         const reviewMarkdown = formatReviewAsMarkdown(reviewResult);
 
         // 差分ファイルリストを取得（差分外判定用）
@@ -379,7 +256,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           issue => issue.file_path && !diffFiles.includes(issue.file_path)
         );
 
-        let fullMarkdown = `# PR #${prNumber} 自動レビュー結果\n\n`;
+        let fullMarkdown = `# PR #${context.config.prNumber} 自動レビュー結果\n\n`;
         fullMarkdown += `## 📊 サマリー（PRコメント）\n\n`;
         fullMarkdown += `> **GitHub投稿先**: PRの会話タブに通常のコメントとして投稿されます\n\n`;
         fullMarkdown += `${reviewMarkdown}\n\n`;
@@ -433,7 +310,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = dirname(__filename);
         const outputDir = join(__dirname, '../output');
-        const outputPath = join(outputDir, `pr-${prNumber}-review.md`);
+        const outputPath = join(outputDir, `pr-${context.config.prNumber}-review.md`);
 
         await mkdir(outputDir, { recursive: true });
         await Bun.write(outputPath, fullMarkdown);
@@ -441,7 +318,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         console.error(`[MCP] Review saved to: ${outputPath}`);
 
         // バッファをクリア
-        reviewIssuesBuffer.length = 0;
+        context.clearReviewIssuesBuffer();
         console.error(`[MCP] Review buffer cleared`);
 
         return {
@@ -467,6 +344,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     // 通常モード: GitHubに投稿
+    const prClient = context.getPRClient();
+    const octokit = context.getOctokit();
     // GitHub clients check
     if (!prClient || !octokit) {
       console.error('[MCP] GitHub clients not initialized, skipping GitHub posting');
@@ -480,7 +359,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
-    if (!headSha) {
+    if (!context.config.headSha) {
       console.error('[MCP] HEAD_SHA not provided, skipping GitHub posting');
       return {
         content: [
@@ -501,22 +380,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // 1. Post inline comments（差分内のファイル）
       console.error('[MCP] Posting inline comments to GitHub...');
       const { postInlineComments } = await import('../lib/github.js');
-      await postInlineComments(prClient, reviewResult, headSha, prNumber, diffFiles);
+      await postInlineComments(prClient, reviewResult, context.config.headSha, context.config.prNumber, diffFiles);
 
       // 2. Post out-of-diff comments（差分外のファイル）
       console.error('[MCP] Posting out-of-diff comments to GitHub...');
       const { postOutOfDiffComments } = await import('../lib/github.js');
-      await postOutOfDiffComments(prClient, reviewResult, diffFiles, prNumber);
+      await postOutOfDiffComments(prClient, reviewResult, diffFiles, context.config.prNumber);
 
       // 3. Post summary comment
       console.error('[MCP] Posting summary comment to GitHub...');
       const { postReviewSummaryComment } = await import('../lib/github.js');
       const { formatReviewAsMarkdown } = await import('../shared/formatter.js');
       const reviewMarkdown = formatReviewAsMarkdown(reviewResult);
-      await postReviewSummaryComment(prClient, prNumber, reviewMarkdown);
+      await postReviewSummaryComment(prClient, context.config.prNumber, reviewMarkdown);
 
       // バッファをクリア
-      reviewIssuesBuffer.length = 0;
+      context.clearReviewIssuesBuffer();
       console.error(`[MCP] Review buffer cleared`);
 
       return {
@@ -543,12 +422,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'get_comments_for_file') {
     const { file_path } = args as { file_path: string };
-    const allComments = commentsByFile.get(file_path) || [];
+    const unresolvedComments = context.getCommentsForFile(file_path);
 
-    // Resolve済みコメントを除外
-    const unresolvedComments = allComments.filter(c => !c.is_resolved);
-
-    console.error(`[MCP] get_comments_for_file: ${file_path} - ${allComments.length} total, ${unresolvedComments.length} unresolved`);
+    console.error(`[MCP] get_comments_for_file: ${file_path} - ${unresolvedComments.length} unresolved`);
 
     return {
       content: [
@@ -568,6 +444,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       reasoning: string;
     };
 
+    const prClient = context.getPRClient();
+    const threadResolver = context.getThreadResolver();
+
     if (!prClient || !threadResolver) {
       return {
         content: [
@@ -585,7 +464,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         case 'no_change':
           // 差分なし → 警告コメント
           await prClient.postReplyComment(
-            prNumber,
+            context.config.prNumber,
             comment_id,
             `@${AI_AGENT_MENTION}\n\n⚠️ このファイルはコメント投稿後に変更されていません。\n\n${reasoning}\n\n引き続き対応をお願いします 🙏\n\n_- ${BOT_SIGNATURE}_`
           );
@@ -595,9 +474,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         case 'has_replies':
           // 返信あり → オーナーメンション
           await prClient.postReplyComment(
-            prNumber,
+            context.config.prNumber,
             comment_id,
-            `@${prAuthor} こちらのConversationについて、判断をお願いします。\n\n${reasoning}\n\nファイルに変更がありましたが、議論が継続中のため、自動クローズしていません。\n\n_- ${BOT_SIGNATURE}_`
+            `@${context.config.prAuthor} こちらのConversationについて、判断をお願いします。\n\n${reasoning}\n\nファイルに変更がありましたが、議論が継続中のため、自動クローズしていません。\n\n_- ${BOT_SIGNATURE}_`
           );
           console.error(`[MCP] Mentioned owner for comment ${comment_id}`);
           break;
@@ -609,7 +488,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             await threadResolver.resolveThread(thread_id);
             console.error(`[MCP] Resolved thread ${thread_id}`);
             await prClient.postReplyComment(
-              prNumber,
+              context.config.prNumber,
               comment_id,
               `✅ 実装が大幅に変更されました\n\n${reasoning}\n\n前回の指摘は無効になりました。新しい実装に問題があれば、次のレビューでお知らせします。\n\n_- ${BOT_SIGNATURE}_`
             );
@@ -628,7 +507,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             await threadResolver.resolveThread(thread_id);
             console.error(`[MCP] Resolved thread ${thread_id}`);
             await prClient.postReplyComment(
-              prNumber,
+              context.config.prNumber,
               comment_id,
               `✅ TODO/コメントで対応計画が記載されました\n\n${reasoning}\n\n対応計画が明確なため、クローズします。\n\n_- ${BOT_SIGNATURE}_`
             );
@@ -643,7 +522,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         case 'not_resolved':
           // 未解決 → 再コメント
           await prClient.postReplyComment(
-            prNumber,
+            context.config.prNumber,
             comment_id,
             `@${AI_AGENT_MENTION}\n\n⚠️ まだ根本的な解決に至っていません\n\n${reasoning}\n\n引き続き対応をお願いします 🙏\n\n_- ${BOT_SIGNATURE}_`
           );
@@ -675,24 +554,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'get_unchecked_guideline') {
     console.error('[MCP-ReviewUtil] Processing get_unchecked_guideline...');
-
-    if (!guidelinesData) {
-      console.error('[MCP-ReviewUtil] ERROR: guidelinesData is null');
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(null)
-          }
-        ]
-      };
-    }
-
-    console.error(`[MCP-ReviewUtil] Total guidelines: ${guidelinesData.guidelines.length}`);
-    console.error(`[MCP-ReviewUtil] Checked count: ${guidelinesData.guidelines.filter(g => g.checked).length}`);
-
-    // 最初の未チェック観点を取得
-    const unchecked = guidelinesData.guidelines.find(g => !g.checked);
+    const unchecked = context.getUncheckedGuideline();
 
     if (!unchecked) {
       console.error('[MCP-ReviewUtil] All guidelines are checked');
@@ -723,57 +585,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { id } = args as { id: number };
     console.error(`[MCP-ReviewUtil] Marking guideline ID: ${id}`);
 
-    if (!guidelinesData) {
-      console.error('[MCP-ReviewUtil] ERROR: guidelinesData is null');
-      return {
-        content: [
-          {
-            type: 'text',
-            text: '❌ Guidelines data not loaded'
-          }
-        ],
-        isError: true
-      };
+    if (context.markGuidelineChecked(id)) {
+        await context.saveGuidelines();
+        const guidelines = context.getGuidelines();
+        const remaining = guidelines ? guidelines.guidelines.filter(g => !g.checked).length : 0;
+        console.error(`[MCP-ReviewUtil] Marked guideline ${id} as checked. Remaining: ${remaining}`);
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: `✅ Guideline ${id} marked as checked. Remaining unchecked: ${remaining}`
+                }
+            ]
+        };
+    } else {
+        console.error(`[MCP-ReviewUtil] ERROR: Guideline ID ${id} not found or data not loaded`);
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: `❌ Guideline ID ${id} not found or guidelines not loaded`
+                }
+            ],
+            isError: true
+        };
     }
-
-    // 該当観点を探してcheckedをtrueに
-    const guideline = guidelinesData.guidelines.find(g => g.id === id);
-
-    if (!guideline) {
-      console.error(`[MCP-ReviewUtil] ERROR: Guideline ID ${id} not found`);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `❌ Guideline ID ${id} not found`
-          }
-        ],
-        isError: true
-      };
-    }
-
-    console.error(`[MCP-ReviewUtil] Found guideline: ${guideline.rule.substring(0, 50)}...`);
-    guideline.checked = true;
-
-    // ファイルに保存
-    console.error(`[MCP-ReviewUtil] Saving to file: ${guidelinesFilePath}`);
-    await saveGuidelines();
-
-    const remaining = guidelinesData.guidelines.filter(g => !g.checked).length;
-    console.error(`[MCP-ReviewUtil] Marked guideline ${id} as checked. Remaining: ${remaining}`);
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `✅ Guideline ${id} marked as checked. Remaining unchecked: ${remaining}`
-        }
-      ]
-    };
   }
 
   if (name === 'get_all_guidelines') {
-    if (!guidelinesData) {
+    const guidelines = context.getGuidelines();
+    if (!guidelines) {
       return {
         content: [
           {
@@ -788,7 +629,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(guidelinesData, null, 2)
+          text: JSON.stringify(guidelines, null, 2)
         }
       ]
     };
@@ -799,15 +640,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Run server
 async function main() {
-  // Initialize existing comments from JSON file
-  await initializeComments();
-
-  // Initialize GitHub clients
-  initializeGitHubClients();
-
-  // Initialize guidelines from JSON file
-  await initializeGuidelines();
-
+  context = await ReviewContext.create(process.env);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

@@ -21,24 +21,11 @@ fi
 PR_NUMBER=$1
 
 # Check required commands
-if ! command -v gh &> /dev/null; then
-  echo -e "${RED}❌ Error: GitHub CLI (gh) is not installed${NC}"
-  echo "Install: brew install gh"
+if [ ! -f "/app/scripts/github-client.sh" ]; then
+  echo -e "${RED}❌ Error: /app/scripts/github-client.sh not found${NC}"
   exit 1
 fi
 
-# Check required environment variables
-if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
-  echo -e "${RED}❌ Error: CLAUDE_CODE_OAUTH_TOKEN is not set${NC}"
-  echo "Please set CLAUDE_CODE_OAUTH_TOKEN in your environment"
-  exit 1
-fi
-
-if [ -z "${GITHUB_TOKEN:-}" ]; then
-  echo -e "${RED}❌ Error: GITHUB_TOKEN is not set${NC}"
-  echo "Please set GITHUB_TOKEN in your environment"
-  exit 1
-fi
 
 # Get repository info from git remote
 REPO_URL=$(git config --get remote.origin.url)
@@ -65,7 +52,7 @@ echo ""
 
 # Fetch PR diff
 echo -e "${YELLOW}📥 Fetching PR diff...${NC}"
-if ! gh pr diff "$PR_NUMBER" > pr-diff.txt 2>&1; then
+if ! /app/scripts/github-client.sh get_pr_diff "$OWNER" "$REPO" "$PR_NUMBER" > pr-diff.txt 2>&1; then
   echo -e "${RED}❌ Error: Failed to fetch PR diff${NC}"
   echo "Make sure PR #${PR_NUMBER} exists and you have access"
   exit 1
@@ -76,7 +63,7 @@ echo -e "${GREEN}✅ Fetched PR diff (${DIFF_SIZE} lines)${NC}"
 echo ""
 
 # Get PR author
-PR_AUTHOR=$(gh pr view "$PR_NUMBER" --json author --jq '.author.login' 2>/dev/null || echo "$OWNER")
+PR_AUTHOR=$(/app/scripts/github-client.sh get_pr_author "$OWNER" "$REPO" "$PR_NUMBER" 2>/dev/null || echo "$OWNER")
 
 # Export environment variables
 export GITHUB_REPOSITORY
