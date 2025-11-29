@@ -15,6 +15,7 @@ const prReviewEnvSchema = z.object({
 
 const julesSessionEnvSchema = z.object({
     ...commonEnvSchema,
+    JULES_API_KEY: z.string().min(1, 'JULES_API_KEY is required'),
     ISSUE_NUMBER: z.string().regex(/^\d+$/, 'ISSUE_NUMBER must be a number'),
     COMMENT_BODY: z.string().min(1, 'COMMENT_BODY is required'),
     COMMENT_USER: z.string().min(1, 'COMMENT_USER is required'),

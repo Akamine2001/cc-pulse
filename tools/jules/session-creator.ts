@@ -25,14 +25,11 @@ export class JulesSessionCreator {
     private repo: string,
     private issueNumber: number,
     private commentBody: string,
-    private commentUser: string
+    private commentUser: string,
+    julesApiKey: string
   ) {
     this.issueClient = new IssueClient(octokit, owner, repo);
-    const apiKey = process.env.JULES_API_KEY;
-    if (!apiKey) {
-      throw new Error('JULES_API_KEY environment variable is required');
-    }
-    this.julesClient = new JulesApiClient(apiKey, owner, repo);
+    this.julesClient = new JulesApiClient(julesApiKey, owner, repo);
   }
 
   async execute(): Promise<void> {

@@ -30,7 +30,8 @@ async function main() {
     repo,
     parseInt(env.ISSUE_NUMBER),
     env.COMMENT_BODY,
-    env.COMMENT_USER
+    env.COMMENT_USER,
+    env.JULES_API_KEY
   );
 
   await sessionCreator.execute();
