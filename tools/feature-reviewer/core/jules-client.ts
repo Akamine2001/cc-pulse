@@ -34,9 +34,12 @@ const SourcesListResponseSchema = z.object({
 const SessionDetailsSchema = z.object({
   name: z.string(),
   url: z.string().optional(),
-  pullRequests: z.array(z.object({
-    number: z.number(),
-  })).optional(),
+  // 単数形: 1つのPRが紐づく場合
+  pullRequest: z.object({
+    url: z.string(),
+    title: z.string().optional(),
+    description: z.string().optional(),
+  }).optional(),
 });
 
 /**
@@ -229,12 +232,15 @@ export class JulesApiClient {
 
     console.log(`  ℹ️  Found ${sessions.length} session(s), checking each...`);
 
-    // 2. 各セッションの詳細を取得してPR番号を確認
+    // 2. 各セッションの詳細を取得してPR URLを確認
+    const targetPrUrl = `https://github.com/${this.owner}/${this.repo}/pull/${prNumber}`;
+
     for (const session of sessions) {
       try {
         const sessionDetails = await this.getSessionDetails(session.name);
 
-        if (sessionDetails.pullRequests?.some((pr: { number: number }) => pr.number === prNumber)) {
+        // pullRequest (単数形) フィールドのURLでマッチング
+        if (sessionDetails.pullRequest?.url === targetPrUrl) {
           console.log(`  ✅ Found matching session: ${session.name}`);
           return sessionDetails.url || session.url;
         }
