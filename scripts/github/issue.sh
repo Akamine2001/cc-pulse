@@ -1,57 +1,17 @@
 #!/bin/bash
 #
-# GitHub Issue管理スクリプト
-# 使用方法: ./scripts/github-issues.sh [操作] [オプション]
-#
-# 環境変数:
-#   GH_TOKEN     - GitHub APIトークン（優先）
-#   GITHUB_TOKEN - GitHub APIトークン（GH_TOKENがない場合に使用）
-#   GITHUB_REPO  - リポジトリ (owner/repo形式、省略時はgitから取得)
+# GitHub Client - Issue Functions
 #
 
 set -e
 
-# 色定義
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-GRAY='\033[0;90m'
-NC='\033[0m' # No Color
-
-# GitHub API URL
-GITHUB_API="https://api.github.com"
-
-# トークンを取得（GH_TOKEN優先、なければGITHUB_TOKEN）
-get_token() {
-  if [ -n "$GH_TOKEN" ]; then
-    echo "$GH_TOKEN"
-  elif [ -n "$GITHUB_TOKEN" ]; then
-    echo "$GITHUB_TOKEN"
-  else
-    echo ""
-  fi
-}
-
-# リポジトリ情報を取得
-get_repo_info() {
-  if [ -n "$GITHUB_REPO" ]; then
-    echo "$GITHUB_REPO"
-    return
-  fi
-
-  # gitのremote URLから取得
-  local remote_url
-  remote_url=$(git remote get-url origin 2>/dev/null || echo "")
-
-  if [ -z "$remote_url" ]; then
-    echo -e "${RED}エラー: GITHUB_REPOを設定するか、gitリポジトリ内で実行してください${NC}" >&2
-    exit 1
-  fi
-
-  # URLからowner/repoを抽出
-  echo "$remote_url" | sed -E 's/.*[:/]([^/]+\/[^/]+)(\.git)?$/\1/' | sed 's/\.git$//'
+_check_for_help() {
+    for arg in "$@"; do
+        if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 # トークンチェック
@@ -65,39 +25,12 @@ check_token() {
   fi
 }
 
-# ヘルプ表示
-show_help() {
-  echo "GitHub Issue管理スクリプト"
-  echo ""
-  echo "使用方法:"
-  echo "  $0 <操作> [オプション]"
-  echo ""
-  echo "操作:"
-  echo "  list                          Issue一覧を表示"
-  echo "  get <issue番号>               Issueの詳細を表示"
-  echo "  create -t <タイトル> [-b <本文>] [-l <ラベル>]"
-  echo "                                Issueを新規作成"
-  echo "  update <issue番号> [-t <タイトル>] [-b <本文>] [-s <状態>]"
-  echo "                                Issueを更新"
-  echo ""
-  echo "環境変数:"
-  echo "  GH_TOKEN           GitHub APIトークン（優先）"
-  echo "  GITHUB_TOKEN       GitHub APIトークン（GH_TOKENがない場合）"
-  echo "  GITHUB_REPO        リポジトリ (owner/repo形式、省略時はgitから取得)"
-  echo ""
-  echo "オプション:"
-  echo "  -h, --help         このヘルプを表示"
-  echo ""
-  echo "例:"
-  echo "  $0 list                           Issue一覧を表示"
-  echo "  $0 get 123                        Issue #123の詳細を表示"
-  echo "  $0 create -t \"バグ修正\" -b \"詳細説明\"  新規Issue作成"
-  echo "  $0 update 123 -s closed           Issue #123をクローズ"
-  echo "  $0 update 123 -t \"新しいタイトル\"     タイトルを更新"
-}
-
 # Issue一覧を取得
 list_issues() {
+  if _check_for_help "$@"; then
+    echo "Usage: $0 issue list"
+    return 0
+  fi
   check_token
   local token repo
   token=$(get_token)
@@ -143,6 +76,10 @@ list_issues() {
 
 # Issueの詳細を取得
 get_issue() {
+  if _check_for_help "$@"; then
+        echo "使用方法: $0 issue get <Issue番号>"
+    return 0
+  fi
   local issue_number="$1"
 
   if [ -z "$issue_number" ]; then
@@ -202,6 +139,10 @@ get_issue() {
 
 # Issueを新規作成
 create_issue() {
+  if _check_for_help "$@"; then
+    echo "使用方法: $0 issue create -t <タイトル> [-b <本文>] [-l <ラベル>]"
+    return 0
+  fi
   local title=""
   local body=""
   local labels=""
@@ -280,6 +221,10 @@ create_issue() {
 
 # Issueを更新
 update_issue() {
+  if _check_for_help "$@"; then
+    echo "使用方法: $0 issue update <Issue番号> [-t <タイトル>] [-b <本文>] [-s <状態>]"
+    return 0
+  fi
   local issue_number="$1"
   shift
 
@@ -371,49 +316,15 @@ update_issue() {
   echo -e "${CYAN}URL:${NC}      ${updated_url}"
 }
 
-# メイン処理
-main() {
-  # jqチェック
-  if ! command -v jq &> /dev/null; then
-    echo -e "${RED}エラー: jqがインストールされていません${NC}"
-    echo "インストール方法:"
-    echo "  macOS: brew install jq"
-    echo "  Ubuntu: apt install jq"
-    exit 1
-  fi
 
-  # 引数なしの場合はヘルプ表示
-  if [ $# -eq 0 ]; then
-    show_help
-    exit 0
-  fi
-
-  local command="$1"
-  shift
-
-  case "$command" in
-    list)
-      list_issues
-      ;;
-    get)
-      get_issue "$@"
-      ;;
-    create)
-      create_issue "$@"
-      ;;
-    update)
-      update_issue "$@"
-      ;;
-    -h|--help)
-      show_help
-      ;;
-    *)
-      echo -e "${RED}エラー: 不明な操作: $command${NC}"
-      echo ""
-      show_help
-      exit 1
-      ;;
-  esac
+show_issue_help() {
+    echo "使用方法: $0 issue <サブコマンド> [オプション]"
+    echo ""
+    echo "サブコマンド:"
+    echo "  list                          オープンなIssue一覧を表示"
+    echo "  get <番号>                    Issue詳細を表示"
+    echo "  create -t <タイトル> [-b <本文>] [-l <ラベル>]"
+    echo "                                Issueを新規作成"
+    echo "  update <番号> [-t <タイトル>] [-b <本文>] [-s <状態>]"
+    echo "                                Issueを更新"
 }
-
-main "$@"
