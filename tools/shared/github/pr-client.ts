@@ -181,4 +181,46 @@ export class PRClient {
       body
     });
   }
+
+  /**
+   * Issue Commentにリアクションを追加
+   * 差分外コメント（Issue Comment）の解決済みマーカーとして使用
+   */
+  async addReactionToIssueComment(commentId: number, reaction: '+1' | '-1' | 'laugh' | 'confused' | 'heart' | 'hooray' | 'rocket' | 'eyes' = '+1'): Promise<void> {
+    await this.octokit.rest.reactions.createForIssueComment({
+      owner: this.owner,
+      repo: this.repo,
+      comment_id: commentId,
+      content: reaction
+    });
+  }
+
+  async postSummaryComment(prNumber: number, summary: string): Promise<void> {
+    const signature = '<!-- pr-summary-comment -->';
+    const body = `${summary}\n${signature}`;
+
+    const comments = await this.octokit.rest.issues.listComments({
+      owner: this.owner,
+      repo: this.repo,
+      issue_number: prNumber,
+    });
+
+    const existingComment = comments.data.find(c => c.body?.includes(signature));
+
+    if (existingComment) {
+      await this.octokit.rest.issues.updateComment({
+        owner: this.owner,
+        repo: this.repo,
+        comment_id: existingComment.id,
+        body,
+      });
+    } else {
+      await this.octokit.rest.issues.createComment({
+        owner: this.owner,
+        repo: this.repo,
+        issue_number: prNumber,
+        body,
+      });
+    }
+  }
 }

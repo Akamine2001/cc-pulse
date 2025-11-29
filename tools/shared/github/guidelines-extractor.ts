@@ -5,6 +5,7 @@
  */
 
 import type { Octokit } from 'octokit';
+import { JulesApiClient } from '../../feature-reviewer/core/jules-client';
 
 /**
  * サブIssue情報
@@ -82,9 +83,10 @@ export class GuidelinesExtractor {
    * PRからJulesセッション情報を抽出
    *
    * @param prNumber PR番号
+   * @param apiKey Jules API Key（セッション紐付けに使用、オプション）
    * @returns Julesセッション情報（取得失敗時はnull）
    */
-  async extractJulesSessionFromPR(prNumber: number): Promise<SubIssueInfo | null> {
+  async extractJulesSessionFromPR(prNumber: number, apiKey?: string): Promise<SubIssueInfo | null> {
     try {
       console.log('🔍 Extracting Jules session info from related issues...');
 
@@ -106,8 +108,38 @@ export class GuidelinesExtractor {
       }
 
       console.log(`  ✅ Found sub-issue: #${subIssueInfo.subIssueNumber}`);
-      if (subIssueInfo.julesSessionName) {
-        console.log(`  ✅ Found Jules session: ${subIssueInfo.julesSessionName}`);
+
+      // 4. APIキーがある場合、Jules APIでPRとセッションを紐付ける
+      if (apiKey) {
+        console.log('🔍 Finding Jules session for this PR via Jules API...');
+
+        const julesClient = new JulesApiClient(apiKey, this.owner, this.repo);
+
+        try {
+          const sessionUrl = await julesClient.findSessionForPR(prNumber);
+
+          if (sessionUrl) {
+            // セッションURLからセッション名を抽出
+            const sessionId = sessionUrl.match(/\/session\/(\d+)/)?.[1];
+            const sessionName = sessionId ? `sessions/${sessionId}` : undefined;
+
+            subIssueInfo.julesSessionUrl = sessionUrl;
+            subIssueInfo.julesSessionName = sessionName;
+
+            console.log(`  ✅ Found Jules session for PR #${prNumber}: ${sessionName}`);
+            console.log(`  ✅ Session URL: ${sessionUrl}`);
+          } else {
+            console.log(`  ⚠️  No Jules session found for PR #${prNumber}`);
+            subIssueInfo.julesSessionUrl = undefined;
+            subIssueInfo.julesSessionName = undefined;
+          }
+        } catch (error) {
+          console.warn('⚠️  Failed to find Jules session via API:', error);
+          // APIエラーの場合、従来のHTMLコメントベースの情報を使用（後方互換性）
+        }
+      } else if (subIssueInfo.julesSessionName) {
+        // APIキーがない場合は従来のHTMLコメントベースの情報を使用
+        console.log(`  ✅ Found Jules session (from HTML comment): ${subIssueInfo.julesSessionName}`);
         console.log(`  ✅ Session URL: ${subIssueInfo.julesSessionUrl}`);
       }
 

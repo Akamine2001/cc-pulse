@@ -130,7 +130,9 @@ export const SubmitAllReviewsInputSchema = z.object({
     .describe('全体の総評（簡潔に）'),
   category_comments: z.array(CategoryCommentSchema)
     .min(1, '少なくとも1つのカテゴリコメントが必要です')
-    .describe('カテゴリ別の評価コメント（問題が見つかったカテゴリについて記載）')
+    .describe('カテゴリ別の評価コメント（問題が見つかったカテゴリについて記載）'),
+  jules_session_found: z.boolean().optional()
+    .describe('Julesセッションが見つかったかどうか（オプション）')
 });
 
 export type SubmitAllReviewsInput = z.infer<typeof SubmitAllReviewsInputSchema>;

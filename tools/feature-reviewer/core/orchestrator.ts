@@ -134,56 +134,9 @@ export class FeatureReviewOrchestrator {
         console.log(`   URL: ${subIssue.html_url}`);
         console.log('');
 
-        // ====== Phase 4: Jules API呼び出し ======
-        let julesSessionUrl: string | undefined;
-        let julesSessionName: string | undefined;
-        try {
-          // プロンプトをmdファイルとして保存
-          const prompt = `# Issue #${issue.number}: ${issue.title}
-
-${issue.body}
-
----
-
-**重要な指示:**
-実装完了後にPRを作成する際は、必ず以下のPRテンプレートに従ってPR本文を作成してください：
-
-**PRテンプレートの場所:** \`.github/pull_request_template.md\`
-
-**特に重要：**
-PR本文の「関連Issue」セクションに必ず以下を含めてください：
-\`Closes #${issue.number}\`
-
-これにより親Issueとの紐付けが確実になり、自動レビューシステムが正しく動作します。`;
-          const promptPath = await this.savePromptToFile(
-            `issue-${issue.number}.md`,
-            prompt
-          );
-          console.log(`✅ Prompt saved to: ${promptPath}`);
-
-          // Jules API呼び出し
-          const julesResponse =
-            await this.julesClient.startAutomatedImplementation(
-              prompt,
-              issue.number,
-              subIssue.number
-            );
-          julesSessionUrl = julesResponse.url;
-          julesSessionName = julesResponse.name;
-        } catch (julesError) {
-          console.error('❌ Jules API call failed:', julesError);
-          // サブIssueにエラーコメントを投稿
-          await this.postJulesErrorComment(subIssue.number, julesError);
-          // 親Issueにもエラーを通知
-          await this.postErrorComment(julesError);
-          // カスタムエラーをthrowして、上位でのエラーコメント重複投稿を防ぐ
-          const errorMessage = julesError instanceof Error ? julesError.message : String(julesError);
-          throw new JulesApiError(errorMessage);
-        }
-
-        // ====== Phase 5: 成功コメント投稿 ======
+        // ====== Phase 4: 成功コメント投稿 ======
         console.log('💬 Posting success comment to parent issue...');
-        await this.postSuccessComment(subIssue.number, julesSessionUrl, julesSessionName);
+        await this.postSuccessComment(subIssue.number);
         console.log('✅ Success comment posted');
         console.log('');
         console.log('🎉 Feature Reviewer completed successfully!');
@@ -223,31 +176,12 @@ PR本文の「関連Issue」セクションに必ず以下を含めてくださ�
   /**
    * 成功コメントを投稿
    */
-  /**
-   * 成功コメントを投稿
-   */
-  private async postSuccessComment(
-    subIssueNumber: number,
-    julesSessionUrl?: string,
-    julesSessionName?: string
-  ): Promise<void> {
+  private async postSuccessComment(subIssueNumber: number): Promise<void> {
     const template = await this.loadTemplate('success-comment.md');
-    let comment = template.replace(
+    const comment = template.replace(
       /\{\{SUB_ISSUE_NUMBER\}\}/g,
       String(subIssueNumber)
     );
-    if (julesSessionUrl) {
-      comment = comment.replace(
-        /\{\{JULES_SESSION_URL\}\}/g,
-        julesSessionUrl
-      );
-    }
-    if (julesSessionName) {
-      comment = comment.replace(
-        /\{\{JULES_SESSION_NAME\}\}/g,
-        julesSessionName
-      );
-    }
     await this.issueClient.postComment(this.issueNumber, comment);
   }
 

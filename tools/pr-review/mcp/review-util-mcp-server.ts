@@ -333,11 +333,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
 
     // サマリーを生成
-    const summary = generateSummaryFromTemplate(
+    let summary = generateSummaryFromTemplate(
       input.summary_comment,
       input.category_comments,
       reviewIssuesBuffer
     );
+
+    // Julesセッション情報が見つからなかった場合、サマリーに追記
+    const julesSessionFound = process.env.JULES_SESSION_FOUND === 'true';
+    if (!julesSessionFound) {
+      summary += '\n\nℹ️ Julesセッション: 見つかりませんでした（julesコメントは送信されません）';
+    }
 
     const reviewResult = {
       issues: reviewIssuesBuffer,
@@ -597,30 +603,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           break;
 
         case 'major_change':
-          // 大幅変更 → スレッドResolve + 成功コメント
+          // 大幅変更 → スレッドResolve（インライン）またはリアクション（差分外）
           if (thread_id) {
+            // インラインコメント → スレッドResolve + 返信
             await threadResolver.resolveThread(thread_id);
             console.error(`[MCP] Resolved thread ${thread_id}`);
+            await prClient.postReplyComment(
+              prNumber,
+              comment_id,
+              `✅ 実装が大幅に変更されました\n\n${reasoning}\n\n前回の指摘は無効になりました。新しい実装に問題があれば、次のレビューでお知らせします。\n\n_- ${BOT_SIGNATURE}_`
+            );
+          } else {
+            // 差分外コメント → リアクションで解決済みマーク
+            await prClient.addReactionToIssueComment(comment_id, '+1');
+            console.error(`[MCP] Added reaction to issue comment ${comment_id}`);
           }
-          await prClient.postReplyComment(
-            prNumber,
-            comment_id,
-            `✅ 実装が大幅に変更されました\n\n${reasoning}\n\n前回の指摘は無効になりました。新しい実装に問題があれば、次のレビューでお知らせします。\n\n_- ${BOT_SIGNATURE}_`
-          );
           console.error(`[MCP] Resolved comment ${comment_id} (major_change)`);
           break;
 
         case 'todo_added':
-          // TODO追加 → スレッドResolve + 成功コメント
+          // TODO追加 → スレッドResolve（インライン）またはリアクション（差分外）
           if (thread_id) {
+            // インラインコメント → スレッドResolve + 返信
             await threadResolver.resolveThread(thread_id);
             console.error(`[MCP] Resolved thread ${thread_id}`);
+            await prClient.postReplyComment(
+              prNumber,
+              comment_id,
+              `✅ TODO/コメントで対応計画が記載されました\n\n${reasoning}\n\n対応計画が明確なため、クローズします。\n\n_- ${BOT_SIGNATURE}_`
+            );
+          } else {
+            // 差分外コメント → リアクションで解決済みマーク
+            await prClient.addReactionToIssueComment(comment_id, '+1');
+            console.error(`[MCP] Added reaction to issue comment ${comment_id}`);
           }
-          await prClient.postReplyComment(
-            prNumber,
-            comment_id,
-            `✅ TODO/コメントで対応計画が記載されました\n\n${reasoning}\n\n対応計画が明確なため、クローズします。\n\n_- ${BOT_SIGNATURE}_`
-          );
           console.error(`[MCP] Resolved comment ${comment_id} (todo_added)`);
           break;
 

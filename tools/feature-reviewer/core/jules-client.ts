@@ -29,6 +29,17 @@ const SourcesListResponseSchema = z.object({
 });
 
 /**
+ * Session Details APIレスポンススキーマ
+ */
+const SessionDetailsSchema = z.object({
+  name: z.string(),
+  url: z.string().optional(),
+  pullRequests: z.array(z.object({
+    number: z.number(),
+  })).optional(),
+});
+
+/**
  * Session作成APIレスポンススキーマ
  */
 const JulesSessionResponseSchema = z.object({
@@ -130,23 +141,20 @@ export class JulesApiClient {
   async startAutomatedImplementation(
     prompt: string,
     issueNumber: number,
-    subIssueNumber: number
+    subIssueNumber: number | undefined,
+    branch?: string
   ): Promise<JulesSessionResponse> {
     console.log('🚀 Calling Jules API to start automated implementation...');
 
-    // 1. Sourceを取得
     const sourceName = await this.getSource();
+    const startingBranch = branch || await this.getDefaultBranch();
 
-    // 2. デフォルトブランチを取得
-    const defaultBranch = await this.getDefaultBranch();
-
-    // 3. Session作成リクエスト
     const requestBody = {
       prompt: prompt,
       sourceContext: {
         source: sourceName,
         githubRepoContext: {
-          startingBranch: defaultBranch,
+          startingBranch: startingBranch,
         },
       },
       automationMode: 'AUTO_CREATE_PR',
@@ -192,6 +200,68 @@ export class JulesApiClient {
       throw new Error(`Invalid session URL format: ${sessionUrl}`);
     }
     return match[2];
+  }
+
+  /**
+   * Finds the Jules session URL for a given pull request number.
+   * Note: This method lists all sessions and then fetches details for each one individually.
+   * This could be inefficient and slow if the number of sessions becomes large.
+   */
+  async findSessionForPR(prNumber: number): Promise<string | null> {
+    console.log(`🔍 Searching for Jules session that created PR #${prNumber}...`);
+
+    // 1. 全セッションを取得（filterパラメータは未サポートのため使用しない）
+    const response = await fetch(`${JULES_API_BASE}/sessions`, {
+      method: 'GET',
+      headers: { 'X-Goog-Api-Key': this.apiKey },
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Failed to list sessions: ${response.status} - ${errorBody}`);
+    }
+
+    const { sessions } = await response.json();
+    if (!sessions || sessions.length === 0) {
+      console.log('  ℹ️  No sessions found');
+      return null;
+    }
+
+    console.log(`  ℹ️  Found ${sessions.length} session(s), checking each...`);
+
+    // 2. 各セッションの詳細を取得してPR番号を確認
+    for (const session of sessions) {
+      try {
+        const sessionDetails = await this.getSessionDetails(session.name);
+
+        if (sessionDetails.pullRequests?.some((pr: { number: number }) => pr.number === prNumber)) {
+          console.log(`  ✅ Found matching session: ${session.name}`);
+          return sessionDetails.url || session.url;
+        }
+      } catch (error) {
+        // 個別セッションの取得失敗は無視して続行
+        console.warn(`  ⚠️  Failed to get details for session ${session.name}:`, error);
+        continue;
+      }
+    }
+
+    console.log(`  ⚠️  No session found for PR #${prNumber}`);
+    return null;
+  }
+
+  private async getSessionDetails(sessionName: string): Promise<z.infer<typeof SessionDetailsSchema>> {
+    const response = await fetch(`${JULES_API_BASE}/${sessionName}`, {
+      method: 'GET',
+      headers: { 'X-Goog-Api-Key': this.apiKey },
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Failed to get session details: ${response.status} - ${errorBody}`);
+    }
+
+    const data = await response.json();
+    return SessionDetailsSchema.parse(data);
   }
 
   /**
