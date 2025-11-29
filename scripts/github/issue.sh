@@ -5,15 +5,6 @@
 
 set -e
 
-_check_for_help() {
-    for arg in "$@"; do
-        if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
 # トークンチェック
 check_token() {
   local token
@@ -27,10 +18,6 @@ check_token() {
 
 # Issue一覧を取得
 list_issues() {
-  if _check_for_help "$@"; then
-    echo "Usage: $0 issue list"
-    return 0
-  fi
   check_token
   local token repo
   token=$(get_token)
@@ -76,10 +63,6 @@ list_issues() {
 
 # Issueの詳細を取得
 get_issue() {
-  if _check_for_help "$@"; then
-        echo "使用方法: $0 issue get <Issue番号>"
-    return 0
-  fi
   local issue_number="$1"
 
   if [ -z "$issue_number" ]; then
@@ -139,10 +122,6 @@ get_issue() {
 
 # Issueを新規作成
 create_issue() {
-  if _check_for_help "$@"; then
-    echo "使用方法: $0 issue create -t <タイトル> [-b <本文>] [-l <ラベル>]"
-    return 0
-  fi
   local title=""
   local body=""
   local labels=""
@@ -221,10 +200,6 @@ create_issue() {
 
 # Issueを更新
 update_issue() {
-  if _check_for_help "$@"; then
-    echo "使用方法: $0 issue update <Issue番号> [-t <タイトル>] [-b <本文>] [-s <状態>]"
-    return 0
-  fi
   local issue_number="$1"
   shift
 
@@ -318,7 +293,7 @@ update_issue() {
 
 
 show_issue_help() {
-    echo "使用方法: $0 issue <サブコマンド> [オプション]"
+    echo "使用方法: $0 issue <サブコマンド> [引数]"
     echo ""
     echo "サブコマンド:"
     echo "  list                          オープンなIssue一覧を表示"
