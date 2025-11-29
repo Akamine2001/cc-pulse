@@ -17,7 +17,7 @@ _check_for_help() {
 # PR一覧を取得
 list_prs() {
     if _check_for_help "$@"; then
-        echo "Usage: $0 pr list"
+        echo "使用方法: $0 pr list"
         return 0
     fi
     echo -e "${BLUE}PR一覧を取得中... ($(get_repo_info))${NC}"
@@ -48,7 +48,7 @@ list_prs() {
 # PRの詳細を取得
 get_pr() {
     if _check_for_help "$@"; then
-        echo "Usage: $0 pr get <pr-number>"
+        echo "使用方法: $0 pr get <PR番号>"
         return 0
     fi
     local pr_number="$1"
@@ -98,7 +98,7 @@ get_pr() {
 # PRの差分を表示
 pr_diff() {
     if _check_for_help "$@"; then
-        echo "Usage: $0 pr diff <pr-number>"
+        echo "使用方法: $0 pr diff <PR番号>"
         return 0
     fi
     local pr_number="$1"
@@ -113,7 +113,7 @@ pr_diff() {
 # PRのチェック状況を表示
 pr_checks() {
     if _check_for_help "$@"; then
-        echo "Usage: $0 pr checks <pr-number>"
+        echo "使用方法: $0 pr checks <PR番号>"
         return 0
     fi
     local pr_number="$1"
@@ -168,7 +168,7 @@ pr_checks() {
 # PRを新規作成
 create_pr() {
     if _check_for_help "$@"; then
-        echo "Usage: $0 pr create -t <title> [-b <body>] [-B <base>] [-H <head>]"
+        echo "使用方法: $0 pr create -t <タイトル> [-b <本文>] [-B <ベース>] [-H <ヘッド>]"
         return 0
     fi
     local title="" body="" base="main" head
@@ -214,7 +214,7 @@ create_pr() {
 # PRにレビューを追加
 add_pr_review() {
     if _check_for_help "$@"; then
-        echo "Usage: $0 pr review <pr-number> <approve|request-changes|comment> [-b <body>]"
+        echo "使用方法: $0 pr review <PR番号> <approve|request-changes|comment> [-b <本文>]"
         return 0
     fi
     local pr_number="$1" event="$2" body=""
@@ -256,7 +256,7 @@ add_pr_review() {
 # PRをクローズ
 close_pr() {
     if _check_for_help "$@"; then
-        echo "Usage: $0 pr close <pr-number>"
+        echo "使用方法: $0 pr close <PR番号>"
         return 0
     fi
     local pr_number="$1"
@@ -274,16 +274,16 @@ close_pr() {
 }
 
 show_pr_help() {
-    echo "Usage: $0 pr <subcommand> [options]"
+    echo "使用方法: $0 pr <サブコマンド> [オプション]"
     echo ""
-    echo "Subcommands:"
-    echo "  list                          List open pull requests"
-    echo "  get <number>                  Get details of a pull request"
-    echo "  diff <number>                 Show the diff of a pull request"
-    echo "  checks <number>               Show the CI/CD checks for a pull request"
-    echo "  create -t <title> [-b <body>] [-B <base>] [-H <head>]"
-    echo "                                Create a new pull request"
-    echo "  review <number> <approve|request-changes|comment> [-b <body>]"
-    echo "                                Add a review to a pull request"
-    echo "  close <number>                Close a pull request"
+    echo "サブコマンド:"
+    echo "  list                          オープンなPR一覧を表示"
+    echo "  get <番号>                    PR詳細を表示"
+    echo "  diff <番号>                   変更差分を表示"
+    echo "  checks <番号>                 CI/CDステータス確認"
+    echo "  create -t <タイトル> [-b <本文>] [-B <ベース>] [-H <ヘッド>]"
+    echo "                                PRを新規作成"
+    echo "  review <番号> <approve|request-changes|comment> [-b <コメント>]"
+    echo "                                レビュー追加"
+    echo "  close <番号>                  PRをクローズ"
 }

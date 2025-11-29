@@ -77,7 +77,7 @@ list_issues() {
 # Issueの詳細を取得
 get_issue() {
   if _check_for_help "$@"; then
-    echo "Usage: $0 issue get <issue-number>"
+        echo "使用方法: $0 issue get <Issue番号>"
     return 0
   fi
   local issue_number="$1"
@@ -140,7 +140,7 @@ get_issue() {
 # Issueを新規作成
 create_issue() {
   if _check_for_help "$@"; then
-    echo "Usage: $0 issue create -t <title> [-b <body>] [-l <labels>]"
+    echo "使用方法: $0 issue create -t <タイトル> [-b <本文>] [-l <ラベル>]"
     return 0
   fi
   local title=""
@@ -222,7 +222,7 @@ create_issue() {
 # Issueを更新
 update_issue() {
   if _check_for_help "$@"; then
-    echo "Usage: $0 issue update <issue-number> [-t <title>] [-b <body>] [-s <state>]"
+    echo "使用方法: $0 issue update <Issue番号> [-t <タイトル>] [-b <本文>] [-s <状態>]"
     return 0
   fi
   local issue_number="$1"
@@ -318,13 +318,13 @@ update_issue() {
 
 
 show_issue_help() {
-    echo "Usage: $0 issue <subcommand> [options]"
+    echo "使用方法: $0 issue <サブコマンド> [オプション]"
     echo ""
-    echo "Subcommands:"
-    echo "  list                          List open issues"
-    echo "  get <number>                  Get details of an issue"
-    echo "  create -t <title> [-b <body>] [-l <labels>]"
-    echo "                                Create a new issue"
-    echo "  update <number> [-t <title>] [-b <body>] [-s <state>]"
-    echo "                                Update an existing issue"
+    echo "サブコマンド:"
+    echo "  list                          オープンなIssue一覧を表示"
+    echo "  get <番号>                    Issue詳細を表示"
+    echo "  create -t <タイトル> [-b <本文>] [-l <ラベル>]"
+    echo "                                Issueを新規作成"
+    echo "  update <番号> [-t <タイトル>] [-b <本文>] [-s <状態>]"
+    echo "                                Issueを更新"
 }
