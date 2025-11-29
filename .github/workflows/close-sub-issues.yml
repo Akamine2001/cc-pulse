@@ -23,7 +23,7 @@ jobs:
           echo "PR Body: $PR_BODY"
 
           # "Closes #123" / "Fixes #456" / "Resolves #789" などから番号を抽出
-          PARENT_ISSUE=$(echo "$PR_BODY" | grep -oiP '(?:Closes|Fixes|Resolves)\s+#\K\d+' | head -1)
+          PARENT_ISSUE=$(echo "$PR_BODY" | grep -oiP '(?:Close[s]?|Fix(?:es)?|Resolve[s]?)\s+#\K\d+' | head -1)
 
           if [ -z "$PARENT_ISSUE" ]; then
             echo "⚠️ 親Issueが見つかりませんでした"
