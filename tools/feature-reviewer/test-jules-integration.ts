@@ -43,9 +43,12 @@ Please analyze this test prompt and confirm receipt.
     const issueNumber = 22;  // 実在するIssue
     const subIssueNumber = 23;  // 実在するサブIssue
 
+    const issueTitle = 'Test Issue Title';
+
     const response = await julesClient.startAutomatedImplementation(
       testPrompt,
       issueNumber,
+      issueTitle,
       subIssueNumber
     );
 

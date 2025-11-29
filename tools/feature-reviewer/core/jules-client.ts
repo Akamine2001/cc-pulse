@@ -10,6 +10,14 @@ import { z } from 'zod';
 const JULES_API_BASE = 'https://jules.googleapis.com/v1alpha';
 
 /**
+ * PRに紐づくセッション情報
+ */
+export interface SessionInfoForPR {
+  sessionUrl: string;
+  issueNumber: number | null;
+}
+
+/**
  * Source APIレスポンススキーマ
  */
 const SourceSchema = z.object({
@@ -34,6 +42,8 @@ const SourcesListResponseSchema = z.object({
 const SessionDetailsSchema = z.object({
   name: z.string(),
   url: z.string().optional(),
+  // セッションタイトル（Issue番号を含む形式: "Issue #XX: タイトル"）
+  title: z.string().optional(),
   // 単数形: 1つのPRが紐づく場合
   pullRequest: z.object({
     url: z.string(),
@@ -144,6 +154,7 @@ export class JulesApiClient {
   async startAutomatedImplementation(
     prompt: string,
     issueNumber: number,
+    issueTitle: string,
     subIssueNumber: number | undefined,
     branch?: string
   ): Promise<JulesSessionResponse> {
@@ -152,8 +163,12 @@ export class JulesApiClient {
     const sourceName = await this.getSource();
     const startingBranch = branch || await this.getDefaultBranch();
 
+    // セッションタイトルにIssue番号を含める（PRからの逆引き用）
+    const sessionTitle = `Issue #${issueNumber}: ${issueTitle}`;
+
     const requestBody = {
       prompt: prompt,
+      title: sessionTitle,
       sourceContext: {
         source: sourceName,
         githubRepoContext: {
@@ -183,6 +198,7 @@ export class JulesApiClient {
     console.log(`✅ Jules session created successfully`);
     console.log(`   Session URL: ${responseData.url}`);
     console.log(`   Session ID: ${responseData.id}`);
+    console.log(`   Session Title: ${sessionTitle}`);
     return responseData;
   }
 
@@ -211,6 +227,15 @@ export class JulesApiClient {
    * This could be inefficient and slow if the number of sessions becomes large.
    */
   async findSessionForPR(prNumber: number): Promise<string | null> {
+    const result = await this.findSessionInfoForPR(prNumber);
+    return result?.sessionUrl || null;
+  }
+
+  /**
+   * PRからJulesセッション情報を取得（セッションURL + Issue番号）
+   * セッションのtitleから「Issue #XX:」形式でIssue番号を抽出します。
+   */
+  async findSessionInfoForPR(prNumber: number): Promise<{ sessionUrl: string; issueNumber: number | null } | null> {
     console.log(`🔍 Searching for Jules session that created PR #${prNumber}...`);
 
     // 1. 全セッションを取得（filterパラメータは未サポートのため使用しない）
@@ -242,7 +267,17 @@ export class JulesApiClient {
         // pullRequest (単数形) フィールドのURLでマッチング
         if (sessionDetails.pullRequest?.url === targetPrUrl) {
           console.log(`  ✅ Found matching session: ${session.name}`);
-          return sessionDetails.url || session.url;
+          
+          // titleからIssue番号を抽出（形式: "Issue #XX: タイトル"）
+          const issueNumber = this.extractIssueNumberFromTitle(sessionDetails.title);
+          if (issueNumber) {
+            console.log(`  ✅ Extracted issue number from title: #${issueNumber}`);
+          }
+          
+          return {
+            sessionUrl: sessionDetails.url || session.url,
+            issueNumber,
+          };
         }
       } catch (error) {
         // 個別セッションの取得失敗は無視して続行
@@ -253,6 +288,25 @@ export class JulesApiClient {
 
     console.log(`  ⚠️  No session found for PR #${prNumber}`);
     return null;
+  }
+
+  /**
+   * セッションタイトルからIssue番号を抽出
+   * 形式: "Issue #XX: タイトル"
+   */
+  private extractIssueNumberFromTitle(title: string | undefined): number | null {
+    if (!title) return null;
+    const match = title.match(/^Issue #(\d+):/);
+    return match && match[1] ? parseInt(match[1], 10) : null;
+  }
+
+  /**
+   * PRからIssue番号を取得（Jules APIによる逆引き）
+   * PR本文にIssue参照がない場合のフォールバック用
+   */
+  async findIssueNumberForPR(prNumber: number): Promise<number | null> {
+    const sessionInfo = await this.findSessionInfoForPR(prNumber);
+    return sessionInfo?.issueNumber || null;
   }
 
   private async getSessionDetails(sessionName: string): Promise<z.infer<typeof SessionDetailsSchema>> {

@@ -45,7 +45,7 @@ export class JulesSessionCreator {
       const prompt = this.createPrompt(parentIssue, subIssue, options);
 
       const julesResponse = await retry(3, () =>
-        this.julesClient.startAutomatedImplementation(prompt, parentIssue.number, subIssue?.number, options.branch)
+        this.julesClient.startAutomatedImplementation(prompt, parentIssue.number, parentIssue.title, subIssue?.number, options.branch)
       );
 
       await this.postSessionCreatedComment(parentIssue.number, subIssue?.number, julesResponse.url);

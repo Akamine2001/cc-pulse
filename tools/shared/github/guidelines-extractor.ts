@@ -199,6 +199,22 @@ export class GuidelinesExtractor {
       }
     }
 
+    // PR本文・コメントにIssue参照がない場合、Jules APIで逆引き
+    const julesApiKey = process.env.JULES_API_KEY;
+    if (julesApiKey) {
+      console.log('  ℹ️  No issue reference in PR, trying Jules API fallback...');
+      try {
+        const julesClient = new JulesApiClient(julesApiKey, this.owner, this.repo);
+        const issueNumber = await julesClient.findIssueNumberForPR(prNumber);
+        if (issueNumber) {
+          console.log(`  ✅ Found parent issue via Jules API: #${issueNumber}`);
+          return issueNumber;
+        }
+      } catch (error) {
+        console.warn('  ⚠️  Jules API fallback failed:', error);
+      }
+    }
+
     return null;
   }
 

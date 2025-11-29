@@ -42,9 +42,12 @@ All operations should complete successfully.
     const issueNumber = 22;
     const subIssueNumber = 23;
 
+    const issueTitle = 'Test Issue Title';
+
     const sessionResponse = await julesClient.startAutomatedImplementation(
       testPrompt,
       issueNumber,
+      issueTitle,
       subIssueNumber
     );
 
