@@ -374,6 +374,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           issue => issue.file_path && issue.line_range && diffFiles.includes(issue.file_path)
         );
 
+        // ファイル全体への指摘（差分内だがline_rangeなし）
+        const fileWideIssues = reviewResult.issues.filter(
+          issue => issue.file_path && !issue.line_range && diffFiles.includes(issue.file_path)
+        );
+
         // 差分外コメント（file_pathあり、diffFilesに含まれない）
         const outOfDiffIssues = reviewResult.issues.filter(
           issue => issue.file_path && !diffFiles.includes(issue.file_path)
@@ -407,6 +412,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 fullMarkdown += `**提案**:\n${issue.suggestion}\n\n`;
               }
             }
+          }
+        }
+
+        if (fileWideIssues.length > 0) {
+          fullMarkdown += `---\n\n## 📁 ファイル全体への指摘（PRコメント）\n\n`;
+          fullMarkdown += `> **GitHub投稿先**: PRの会話タブに通常のコメントとして投稿されます\n\n`;
+          fullMarkdown += `以下はファイル全体に対する指摘です（特定の行に限定されません）。\n\n`;
+
+          for (const issue of fileWideIssues) {
+            const severityLabel = { critical: '重大', high: '重要', medium: '中程度', low: '軽微' }[issue.severity];
+
+            fullMarkdown += `### ${issue.file_path} (${severityLabel})\n\n`;
+            fullMarkdown += `**カテゴリ**: ${issue.category}\n`;
+            fullMarkdown += `**問題**:\n${issue.description}\n\n`;
+            fullMarkdown += `**提案**:\n${issue.suggestion}\n\n`;
           }
         }
 
@@ -503,12 +523,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { postInlineComments } = await import('../lib/github.js');
       await postInlineComments(prClient, reviewResult, headSha, prNumber, diffFiles);
 
-      // 2. Post out-of-diff comments（差分外のファイル）
+      // 2. Post file-wide comments（差分内だが行指定なし）
+      console.error('[MCP] Posting file-wide comments to GitHub...');
+      const { postFileWideComments } = await import('../lib/github.js');
+      await postFileWideComments(prClient, reviewResult, diffFiles, prNumber);
+
+      // 3. Post out-of-diff comments（差分外のファイル）
       console.error('[MCP] Posting out-of-diff comments to GitHub...');
       const { postOutOfDiffComments } = await import('../lib/github.js');
       await postOutOfDiffComments(prClient, reviewResult, diffFiles, prNumber);
 
-      // 3. Post summary comment
+      // 4. Post summary comment
       console.error('[MCP] Posting summary comment to GitHub...');
       const { postReviewSummaryComment } = await import('../lib/github.js');
       const { formatReviewAsMarkdown } = await import('../shared/formatter.js');

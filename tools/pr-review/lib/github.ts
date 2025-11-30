@@ -9,7 +9,7 @@ import type { Octokit } from 'octokit';
 import { BOT_SIGNATURE } from '../../shared/constants';
 import type { ReviewResult } from '../shared/schemas';
 import { DiffParser } from './parsers';
-import { formatIssueAsInlineComment, formatOutOfDiffComment } from '../shared/formatter';
+import { formatIssueAsInlineComment, formatOutOfDiffComment, formatFileWideComment } from '../shared/formatter';
 import { PRClient } from '../../shared/github/pr-client';
 
 // ============================================================================
@@ -149,6 +149,55 @@ export async function postOutOfDiffComments(
       console.log(`  ✅ Posted out-of-diff comment for ${issue.file_path}`);
     } catch (error) {
       console.error(`  ❌ Failed to post out-of-diff comment for ${issue.file_path}`);
+      if (error instanceof Error) {
+        console.error(`     Error: ${error.message}`);
+      } else {
+        console.error(`     Error:`, error);
+      }
+    }
+  }
+}
+
+/**
+ * 差分内のファイルだが行番号指定がない問題を通常コメントとして投稿
+ * （ファイル全体に対する指摘）
+ *
+ * @param prClient PR APIクライアント
+ * @param reviewResult レビュー結果
+ * @param diffFiles 差分に含まれるファイルパスのリスト
+ * @param prNumber PR番号
+ */
+export async function postFileWideComments(
+  prClient: PRClient,
+  reviewResult: ReviewResult,
+  diffFiles: string[],
+  prNumber: number
+): Promise<void> {
+  // file_pathあり、line_rangeなし、かつdiffFilesに含まれる問題
+  const fileWideIssues = reviewResult.issues.filter(
+    issue => issue.file_path && !issue.line_range && diffFiles.includes(issue.file_path)
+  );
+
+  if (fileWideIssues.length === 0) {
+    console.log('ℹ️ No file-wide issues to post.');
+    return;
+  }
+
+  console.log(`💬 Posting ${fileWideIssues.length} file-wide comments...`);
+
+  // 重要度順にソート
+  const sortedIssues = fileWideIssues.sort((a, b) => {
+    const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    return severityOrder[a.severity] - severityOrder[b.severity];
+  });
+
+  for (const issue of sortedIssues) {
+    try {
+      const commentBody = formatFileWideComment(issue);
+      await prClient.postComment(prNumber, commentBody);
+      console.log(`  ✅ Posted file-wide comment for ${issue.file_path}`);
+    } catch (error) {
+      console.error(`  ❌ Failed to post file-wide comment for ${issue.file_path}`);
       if (error instanceof Error) {
         console.error(`     Error: ${error.message}`);
       } else {

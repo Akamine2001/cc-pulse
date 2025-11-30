@@ -88,6 +88,30 @@ export function formatOutOfDiffComment(issue: ReviewIssue): string {
 }
 
 /**
+ * 差分内ファイルだが行指定なしの問題をファイル全体への指摘としてフォーマット
+ */
+export function formatFileWideComment(issue: ReviewIssue): string {
+  const severityLabel = getSeverityLabel(issue.severity);
+
+  // AIエージェントメンション（constants.tsに設定されている場合のみ追加）
+  let markdown = '';
+  if (AI_AGENT_MENTION) {
+    markdown = `@${AI_AGENT_MENTION}\n\n`;
+  }
+
+  markdown += `📁 **ファイル全体に関する指摘**\n\n`;
+  markdown += `**ファイル**: \`${issue.file_path}\`\n`;
+  markdown += `**カテゴリ**: ${issue.category}\n`;
+  markdown += `**重要度**: ${severityLabel}\n`;
+  markdown += `**影響**: ${issue.impact}\n\n`;
+  markdown += `**問題**:\n${issue.description}\n\n`;
+  markdown += `**提案**:\n${issue.suggestion}\n\n`;
+  markdown += `---\n_- ${BOT_SIGNATURE}_`;
+
+  return markdown;
+}
+
+/**
  * 個別の問題をインラインコメント用にフォーマット
  */
 export function formatIssueAsInlineComment(issue: ReviewIssue, codeSnippet?: string): string {

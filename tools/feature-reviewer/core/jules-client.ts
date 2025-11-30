@@ -44,12 +44,14 @@ const SessionDetailsSchema = z.object({
   url: z.string().optional(),
   // セッションタイトル（Issue番号を含む形式: "Issue #XX: タイトル"）
   title: z.string().optional(),
-  // 単数形: 1つのPRが紐づく場合
-  pullRequest: z.object({
-    url: z.string(),
-    title: z.string().optional(),
-    description: z.string().optional(),
-  }).optional(),
+  // outputs配列内にPR情報が含まれる
+  outputs: z.array(z.object({
+    pullRequest: z.object({
+      url: z.string(),
+      title: z.string().optional(),
+      description: z.string().optional(),
+    }).optional(),
+  })).optional(),
 });
 
 /**
@@ -264,8 +266,12 @@ export class JulesApiClient {
       try {
         const sessionDetails = await this.getSessionDetails(session.name);
 
-        // pullRequest (単数形) フィールドのURLでマッチング
-        if (sessionDetails.pullRequest?.url === targetPrUrl) {
+        // outputs配列内のpullRequest.urlでマッチング
+        const matchingOutput = sessionDetails.outputs?.find(
+          output => output.pullRequest?.url === targetPrUrl
+        );
+        
+        if (matchingOutput) {
           console.log(`  ✅ Found matching session: ${session.name}`);
           
           // titleからIssue番号を抽出（形式: "Issue #XX: タイトル"）
