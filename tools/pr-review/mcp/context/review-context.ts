@@ -99,17 +99,12 @@ export class ReviewContext {
   }
 
   private initializeGitHubClients(env: NodeJS.ProcessEnv): void {
-    const token = env.GITHUB_TOKEN;
     if (this.config.isLocalMode) {
       console.error('[MCP] Running in LOCAL_MODE - GitHub posting disabled');
-      // In local mode, we don't need a real token, but we can initialize the clients with a dummy one
-      // to avoid null checks everywhere. The tools should not make API calls in local mode.
-      this.octokit = new Octokit({ auth: 'dummy_token' });
-      this.prClient = new PRClient(this.octokit, this.config.owner, this.config.repo);
-      this.threadResolver = new ThreadResolver(this.octokit);
       return;
     }
 
+    const token = env.GITHUB_TOKEN;
     if (!token || !this.config.owner || !this.config.repo || !this.config.prNumber) {
       console.error('[MCP] Missing required environment variables for GitHub API');
       return;
