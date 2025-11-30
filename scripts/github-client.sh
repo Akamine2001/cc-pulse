@@ -9,6 +9,7 @@ SCRIPT_DIR=$(dirname "$0")
 source "${SCRIPT_DIR}/github/common.sh"
 source "${SCRIPT_DIR}/github/issue.sh"
 source "${SCRIPT_DIR}/github/pr.sh"
+source "${SCRIPT_DIR}/github/actions.sh"
 
 # ヘルプ表示
 show_help() {
@@ -20,6 +21,7 @@ show_help() {
     echo "コマンド:"
     echo "  issue              Issue操作"
     echo "  pr                 Pull Request操作"
+    echo "  actions            GitHub Actions操作"
     echo ""
     echo "環境変数:"
     echo "  GH_TOKEN           GitHub APIトークン（優先）"
@@ -78,6 +80,7 @@ main() {
                 get) get_pr "$@";;
                 diff) pr_diff "$@";;
                 checks) pr_checks "$@";;
+                comments) pr_comments "$@";;
                 create) create_pr "$@";;
                 review) add_pr_review "$@";;
                 close) close_pr "$@";;
@@ -88,6 +91,27 @@ main() {
                     else
                         echo -e "${RED}エラー: 不明なサブコマンド: $subcommand${NC}" >&2
                         show_pr_help
+                    fi
+                    exit 1
+                    ;;
+            esac
+            ;;
+        actions)
+            local subcommand="$1"
+            shift
+            case "$subcommand" in
+                list) list_runs "$@";;
+                get) get_run "$@";;
+                jobs) get_jobs "$@";;
+                logs) get_logs "$@";;
+                pr-runs) pr_runs "$@";;
+                -h|--help) show_actions_help;;
+                *)
+                    if [[ -z "$subcommand" ]]; then
+                        show_actions_help
+                    else
+                        echo -e "${RED}エラー: 不明なサブコマンド: $subcommand${NC}" >&2
+                        show_actions_help
                     fi
                     exit 1
                     ;;
