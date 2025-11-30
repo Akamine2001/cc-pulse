@@ -78,6 +78,7 @@ main() {
                 get) get_pr "$@";;
                 diff) pr_diff "$@";;
                 checks) pr_checks "$@";;
+                comments) pr_comments "$@";;
                 create) create_pr "$@";;
                 review) add_pr_review "$@";;
                 close) close_pr "$@";;

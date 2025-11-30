@@ -253,6 +253,53 @@ add_pr_review() {
     echo -e "${GREEN}PR #${pr_number} にレビューを追加しました${NC}"
 }
 
+# PRのレビューコメントを取得
+pr_comments() {
+    if _check_for_help "$@"; then
+        echo "使用方法: $0 pr comments <PR番号>"
+        return 0
+    fi
+    local pr_number="$1"
+    if [ -z "$pr_number" ]; then
+        echo -e "${RED}エラー: PR番号を指定してください${NC}" >&2
+        return 1
+    fi
+
+    echo -e "${BLUE}PR #${pr_number} のコメントを取得中... ($(get_repo_info))${NC}"
+    echo ""
+
+    # レビューコメント（コード行へのコメント）を取得
+    local review_comments
+    review_comments=$(call_api "GET" "/pulls/${pr_number}/comments")
+
+    # 一般的なIssueコメント（PR全体へのコメント）も取得
+    local issue_comments
+    issue_comments=$(call_api "GET" "/issues/${pr_number}/comments")
+
+    local review_count issue_count
+    review_count=$(echo "$review_comments" | jq 'length')
+    issue_count=$(echo "$issue_comments" | jq 'length')
+
+    if [ "$review_count" -eq 0 ] && [ "$issue_count" -eq 0 ]; then
+        echo -e "${YELLOW}このPRにはコメントがありません${NC}"
+        return
+    fi
+
+    # コード行へのレビューコメントを表示
+    if [ "$review_count" -gt 0 ]; then
+        echo -e "${CYAN}=== レビューコメント (コード行) ===${NC}"
+        echo ""
+        echo "$review_comments" | jq -r '.[] | "---\n\u001b[32m作成者:\u001b[0m \(.user.login)\n\u001b[36m日時:\u001b[0m \(.created_at)\n\u001b[36mファイル:\u001b[0m \(.path):\(.line // .original_line // "N/A")\n\n\(.body)\n"'
+    fi
+
+    # PR全体へのコメントを表示
+    if [ "$issue_count" -gt 0 ]; then
+        echo -e "${CYAN}=== 一般コメント (PR全体) ===${NC}"
+        echo ""
+        echo "$issue_comments" | jq -r '.[] | "---\n\u001b[32m作成者:\u001b[0m \(.user.login)\n\u001b[36m日時:\u001b[0m \(.created_at)\n\n\(.body)\n"'
+    fi
+}
+
 # PRをクローズ
 close_pr() {
     if _check_for_help "$@"; then
@@ -281,6 +328,7 @@ show_pr_help() {
     echo "  get <番号>                    PR詳細を表示"
     echo "  diff <番号>                   変更差分を表示"
     echo "  checks <番号>                 CI/CDステータス確認"
+    echo "  comments <番号>               PRコメント一覧を表示"
     echo "  create -t <タイトル> [-b <本文>] [-B <ベース>] [-H <ヘッド>]"
     echo "                                PRを新規作成"
     echo "  review <番号> <approve|request-changes|comment> [-b <コメント>]"
