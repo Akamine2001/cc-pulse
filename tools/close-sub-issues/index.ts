@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 /**
  * Close Sub-Issues on PR Merge
  *
