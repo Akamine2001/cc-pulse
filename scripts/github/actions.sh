@@ -163,15 +163,18 @@ get_logs() {
     repo=$(get_repo_info)
 
     # ログURLを取得（リダイレクト先）
-    local log_url
-    log_url=$(curl -s -I -H "Authorization: token $token" \
+    local log_url header_response
+    header_response=$(curl -s -I -H "Authorization: token $token" \
         -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/${repo}/actions/runs/${run_id}/logs" | \
-        grep -i "^location:" | sed 's/location: //i' | tr -d '\r')
+        "https://api.github.com/repos/${repo}/actions/runs/${run_id}/logs" 2>&1)
+
+    log_url=$(echo "$header_response" | grep -i "^location:" | sed 's/location: //i' | tr -d '\r')
 
     if [ -z "$log_url" ]; then
-        echo -e "${RED}エラー: ログURLを取得できませんでした${NC}" >&2
-        return 1
+        echo -e "${YELLOW}⚠️ ログURLを取得できませんでした。ジョブステップ情報を表示します。${NC}"
+        echo ""
+        _show_job_steps "$run_id"
+        return 0
     fi
 
     # ZIPをダウンロードして展開
@@ -179,7 +182,25 @@ get_logs() {
     mkdir -p "$temp_dir"
 
     echo "ダウンロード中..."
-    curl -sL "$log_url" -o "${temp_dir}/logs.zip"
+    if ! curl -sL --max-time 30 "$log_url" -o "${temp_dir}/logs.zip" 2>/dev/null; then
+        echo -e "${YELLOW}⚠️ ログのダウンロードに失敗しました（ネットワーク制限の可能性）${NC}"
+        echo -e "${GRAY}リダイレクト先: ${log_url:0:60}...${NC}"
+        echo ""
+        echo -e "${BLUE}代わりにジョブステップ情報を表示します:${NC}"
+        echo ""
+        _show_job_steps "$run_id"
+        return 0
+    fi
+
+    # ZIPファイルの検証
+    if [ ! -s "${temp_dir}/logs.zip" ] || ! file "${temp_dir}/logs.zip" | grep -q "Zip archive"; then
+        echo -e "${YELLOW}⚠️ ダウンロードしたファイルが無効です${NC}"
+        echo ""
+        echo -e "${BLUE}代わりにジョブステップ情報を表示します:${NC}"
+        echo ""
+        _show_job_steps "$run_id"
+        return 0
+    fi
 
     echo "展開中..."
     unzip -q -o "${temp_dir}/logs.zip" -d "$temp_dir"
@@ -204,6 +225,31 @@ get_logs() {
         echo ""
         cat "$log_file"
     fi
+}
+
+# ジョブのステップ情報を表示（フォールバック用）
+_show_job_steps() {
+    local run_id="$1"
+
+    # ジョブ一覧を取得
+    local jobs_response
+    jobs_response=$(call_api "GET" "/actions/runs/${run_id}/jobs")
+
+    if [ -z "$jobs_response" ]; then
+        echo -e "${RED}ジョブ情報の取得に失敗しました${NC}"
+        return 1
+    fi
+
+    # 各ジョブのステップを表示
+    echo "$jobs_response" | jq -r '.jobs[] | "----------------------------------------------\n\u001b[32mJob:\u001b[0m \(.name)\n\u001b[36mステータス:\u001b[0m \(.status) (\(.conclusion // "running"))\n\n\u001b[33mステップ:\u001b[0m"'
+
+    echo "$jobs_response" | jq -r '.jobs[].steps[] | "  [\(.conclusion // "running" | if . == "success" then "✓" elif . == "failure" then "✗" elif . == "skipped" then "⏭" else "○" end)] \(.name)"'
+
+    echo ""
+    echo -e "${CYAN}詳細ログはGitHubで確認:${NC}"
+    local html_url
+    html_url=$(call_api "GET" "/actions/runs/${run_id}" | jq -r '.html_url')
+    echo "$html_url"
 }
 
 # PRに関連するWorkflow Runsを取得
