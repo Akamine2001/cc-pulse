@@ -22,6 +22,8 @@ import { PRClient } from '../../shared/github/pr-client';
 import { ThreadResolver } from '../../shared/github/thread-resolver';
 import { BOT_SIGNATURE, AI_AGENT_MENTION } from '../../shared/constants';
 import { ReviewContext } from './context/review-context';
+import { guidelinesHandlers } from './handlers/guidelines/index.js';
+import type { ToolHandler } from './types.js';
 
 // Import schemas from shared
 import {
@@ -33,8 +35,16 @@ import {
   type CategoryComment
 } from '../shared/schemas';
 import type { GuidelinesFile } from '../shared/guidelines-types';
+import type { ToolResult } from './types';
 
 let context: ReviewContext;
+
+// The MCP SDK does not export the server-side result type, so we define a local one
+// that is compatible with our ToolResult
+type ServerResult = {
+  content: { type: 'text'; text: string }[];
+  isError?: boolean;
+};
 
 // Input schema
 const SubmitReviewInputSchema = z.object({
@@ -92,8 +102,20 @@ const server = new Server(
   }
 );
 
+// Register handlers
+const handlers = new Map<string, ToolHandler>();
+
+// New modular handlers
+for (const handler of guidelinesHandlers) {
+  handlers.set(handler.name, handler);
+}
 // List tools handler
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+  const dynamicTools = [...handlers.values()].map(h => ({
+    name: h.name,
+    description: h.description,
+    inputSchema: h.inputSchema,
+  }));
   return {
     tools: [
       {
@@ -147,38 +169,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['comment_id', 'action', 'reasoning']
         }
       },
-      {
-        name: 'get_unchecked_guideline',
-        description: 'Get one unchecked guideline. Returns null if all guidelines are checked.',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          required: []
-        }
-      },
-      {
-        name: 'mark_checked',
-        description: 'Mark a guideline as checked',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'number',
-              description: 'Guideline ID to mark as checked'
-            }
-          },
-          required: ['id']
-        }
-      },
-      {
-        name: 'get_all_guidelines',
-        description: 'Get all guidelines with their current status',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          required: []
-        }
-      }
+      ...dynamicTools,
     ] as Tool[]
   };
 });
@@ -186,6 +177,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 // Call tool handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+
+  // Dynamic handler lookup
+  const handler = handlers.get(name);
+  if (handler) {
+    const result: ToolResult = await handler.execute(args, context);
+    return result as ServerResult;
+  }
 
   if (name === 'add_review_comment') {
     const issue = ReviewIssueSchema.parse(args);
@@ -591,92 +589,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  if (name === 'get_unchecked_guideline') {
-    console.error('[MCP-ReviewUtil] Processing get_unchecked_guideline...');
-    const unchecked = context.getUncheckedGuideline();
-
-    if (!unchecked) {
-      console.error('[MCP-ReviewUtil] All guidelines are checked');
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(null)
-          }
-        ]
-      };
-    }
-
-    console.error(`[MCP-ReviewUtil] Returning unchecked guideline: ID ${unchecked.id}`);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(unchecked, null, 2)
-        }
-      ]
-    };
-  }
-
-  if (name === 'mark_checked') {
-    console.error('[MCP-ReviewUtil] Processing mark_checked...');
-    const { id } = args as { id: number };
-    console.error(`[MCP-ReviewUtil] Marking guideline ID: ${id}`);
-
-    const success = context.markGuidelineChecked(id);
-
-    if (!success) {
-      console.error(`[MCP-ReviewUtil] ERROR: Guideline ID ${id} not found or data not loaded`);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `❌ Guideline ID ${id} not found or data not loaded`
-          }
-        ],
-        isError: true
-      };
-    }
-
-    // ファイルに保存
-    await context.saveGuidelines();
-
-    const guidelines = context.getGuidelines();
-    const remaining = guidelines ? guidelines.guidelines.filter(g => !g.checked).length : 0;
-    console.error(`[MCP-ReviewUtil] Marked guideline ${id} as checked. Remaining: ${remaining}`);
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `✅ Guideline ${id} marked as checked. Remaining unchecked: ${remaining}`
-        }
-      ]
-    };
-  }
-
-  if (name === 'get_all_guidelines') {
-    const guidelines = context.getGuidelines();
-    if (!guidelines) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ guidelines: [] })
-          }
-        ]
-      };
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(guidelines, null, 2)
-        }
-      ]
-    };
-  }
 
   throw new Error(`Unknown tool: ${name}`);
 });

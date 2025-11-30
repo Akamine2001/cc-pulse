@@ -175,6 +175,13 @@ export class ReviewContext {
     return this.guidelinesData.guidelines.find(g => !g.checked) || null;
   }
 
+  getUncheckedGuidelinesCount(): number {
+    if (!this.guidelinesData) {
+      return 0;
+    }
+    return this.guidelinesData.guidelines.filter(g => !g.checked).length;
+  }
+
   markGuidelineChecked(id: number): boolean {
     if (!this.guidelinesData) {
       return false;
