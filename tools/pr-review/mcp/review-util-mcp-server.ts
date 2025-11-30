@@ -23,6 +23,8 @@ import { ThreadResolver } from '../../shared/github/thread-resolver';
 import { BOT_SIGNATURE, AI_AGENT_MENTION } from '../../shared/constants';
 import { ReviewContext } from './context/review-context';
 
+import { guidelinesHandlers } from './handlers/guidelines';
+import type { ServerResult, ToolHandler } from './types';
 // Import schemas from shared
 import {
   ReviewIssueSchema,
@@ -92,101 +94,87 @@ const server = new Server(
   }
 );
 
+// ハンドラー登録
+const handlers = new Map<string, ToolHandler>();
+for (const handler of guidelinesHandlers) {
+  handlers.set(handler.name, handler);
+}
+
 // List tools handler
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: 'add_review_comment',
-        description: 'Add a review issue to buffer (does not post to GitHub yet). Use this for each issue found during review.',
-        inputSchema: zodToJsonSchema(ReviewIssueSchema, { $refStrategy: 'none' })
-      },
-      {
-        name: 'submit_all_reviews',
-        description: 'Submit all buffered review issues to GitHub with overall comment and category assessments. Call this once at the end after all guidelines are checked.',
-        inputSchema: zodToJsonSchema(SubmitAllReviewsInputSchema, { $refStrategy: 'none' })
-      },
-      {
-        name: 'get_comments_for_file',
-        description: 'Get existing review comments for a specific file to avoid duplicate issues',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            file_path: {
-              type: 'string',
-              description: 'File path (e.g., "src/commands/setup.ts")'
-            }
-          },
-          required: ['file_path']
-        }
-      },
-      {
-        name: 'update_conversation',
-        description: 'Update conversation status and post comment based on A/B/C analysis',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            comment_id: {
-              type: 'number',
-              description: 'Comment ID from get_comments_for_file'
-            },
-            thread_id: {
-              type: ['string', 'null'],
-              description: 'Thread ID from get_comments_for_file (nullable)'
-            },
-            action: {
-              type: 'string',
-              enum: ['no_change', 'has_replies', 'major_change', 'todo_added', 'not_resolved'],
-              description: 'Action to take: no_change (差分なし), has_replies (返信あり), major_change (大幅変更), todo_added (TODO追加), not_resolved (未解決)'
-            },
-            reasoning: {
-              type: 'string',
-              description: 'Reasoning for the action (具体的な判定理由)'
-            }
-          },
-          required: ['comment_id', 'action', 'reasoning']
-        }
-      },
-      {
-        name: 'get_unchecked_guideline',
-        description: 'Get one unchecked guideline. Returns null if all guidelines are checked.',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          required: []
-        }
-      },
-      {
-        name: 'mark_checked',
-        description: 'Mark a guideline as checked',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'number',
-              description: 'Guideline ID to mark as checked'
-            }
-          },
-          required: ['id']
-        }
-      },
-      {
-        name: 'get_all_guidelines',
-        description: 'Get all guidelines with their current status',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-          required: []
-        }
+  const tools = [...handlers.values()].map(h => ({
+    name: h.name,
+    description: h.description,
+    inputSchema: h.inputSchema
+  }));
+
+  // 既存のインラインツールも追加
+  tools.push(
+    {
+      name: 'add_review_comment',
+      description: 'Add a review issue to buffer (does not post to GitHub yet). Use this for each issue found during review.',
+      inputSchema: zodToJsonSchema(ReviewIssueSchema, { $refStrategy: 'none' })
+    },
+    {
+      name: 'submit_all_reviews',
+      description: 'Submit all buffered review issues to GitHub with overall comment and category assessments. Call this once at the end after all guidelines are checked.',
+      inputSchema: zodToJsonSchema(SubmitAllReviewsInputSchema, { $refStrategy: 'none' })
+    },
+    {
+      name: 'get_comments_for_file',
+      description: 'Get existing review comments for a specific file to avoid duplicate issues',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          file_path: {
+            type: 'string',
+            description: 'File path (e.g., "src/commands/setup.ts")'
+          }
+        },
+        required: ['file_path']
       }
-    ] as Tool[]
+    },
+    {
+      name: 'update_conversation',
+      description: 'Update conversation status and post comment based on A/B/C analysis',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          comment_id: {
+            type: 'number',
+            description: 'Comment ID from get_comments_for_file'
+          },
+          thread_id: {
+            type: ['string', 'null'],
+            description: 'Thread ID from get_comments_for_file (nullable)'
+          },
+          action: {
+            type: 'string',
+            enum: ['no_change', 'has_replies', 'major_change', 'todo_added', 'not_resolved'],
+            description: 'Action to take: no_change (差分なし), has_replies (返信あり), major_change (大幅変更), todo_added (TODO追加), not_resolved (未解決)'
+          },
+          reasoning: {
+            type: 'string',
+            description: 'Reasoning for the action (具体的な判定理由)'
+          }
+        },
+        required: ['comment_id', 'action', 'reasoning']
+      }
+    }
+  );
+
+  return {
+    tools: tools as Tool[]
   };
 });
 
 // Call tool handler
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request): Promise<ServerResult> => {
   const { name, arguments: args } = request.params;
-
+  const handler = handlers.get(name);
+  if (handler) {
+    return (await handler.execute(args, context)) as ServerResult;
+  }
   if (name === 'add_review_comment') {
     const issue = ReviewIssueSchema.parse(args);
 
@@ -203,7 +191,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: `✅ Review issue added to buffer. Total buffered: ${context.getReviewIssuesCount()}`
         }
       ]
-    };
+    } as ServerResult;
   }
 
   if (name === 'submit_all_reviews') {
@@ -591,92 +579,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  if (name === 'get_unchecked_guideline') {
-    console.error('[MCP-ReviewUtil] Processing get_unchecked_guideline...');
-    const unchecked = context.getUncheckedGuideline();
-
-    if (!unchecked) {
-      console.error('[MCP-ReviewUtil] All guidelines are checked');
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(null)
-          }
-        ]
-      };
-    }
-
-    console.error(`[MCP-ReviewUtil] Returning unchecked guideline: ID ${unchecked.id}`);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(unchecked, null, 2)
-        }
-      ]
-    };
-  }
-
-  if (name === 'mark_checked') {
-    console.error('[MCP-ReviewUtil] Processing mark_checked...');
-    const { id } = args as { id: number };
-    console.error(`[MCP-ReviewUtil] Marking guideline ID: ${id}`);
-
-    const success = context.markGuidelineChecked(id);
-
-    if (!success) {
-      console.error(`[MCP-ReviewUtil] ERROR: Guideline ID ${id} not found or data not loaded`);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `❌ Guideline ID ${id} not found or data not loaded`
-          }
-        ],
-        isError: true
-      };
-    }
-
-    // ファイルに保存
-    await context.saveGuidelines();
-
-    const guidelines = context.getGuidelines();
-    const remaining = guidelines ? guidelines.guidelines.filter(g => !g.checked).length : 0;
-    console.error(`[MCP-ReviewUtil] Marked guideline ${id} as checked. Remaining: ${remaining}`);
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `✅ Guideline ${id} marked as checked. Remaining unchecked: ${remaining}`
-        }
-      ]
-    };
-  }
-
-  if (name === 'get_all_guidelines') {
-    const guidelines = context.getGuidelines();
-    if (!guidelines) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ guidelines: [] })
-          }
-        ]
-      };
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(guidelines, null, 2)
-        }
-      ]
-    };
-  }
 
   throw new Error(`Unknown tool: ${name}`);
 });

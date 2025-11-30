@@ -11,6 +11,15 @@ export interface ToolResult {
   isError?: boolean;
 }
 
+export type ServerResult =
+  | {
+      content: Array<{ type: 'text'; text: string }>;
+      isError?: boolean;
+    }
+  | {
+      tools: ToolDefinition[];
+    };
+
 /**
  * MCPツールハンドラーのインターフェース
  *

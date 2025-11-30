@@ -1,0 +1,136 @@
+{
+  "pr_number": 1,
+  "base_description": "**目的**: すべてのPRで必ず確認すべき基本的な観点\n\n---",
+  "guidelines": [
+    {
+      "id": 1,
+      "category": "類似機能の調査",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "同じような機能がすでに実装されていないか確認",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 2,
+      "category": "実装パターンの統一",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "既存の実装パターンと一致しているか",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 3,
+      "category": "アーキテクチャの一貫性",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "プロジェクトのアーキテクチャに従っているか",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 4,
+      "category": "Bun固有の実装",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "Bun APIを優先使用しているか",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 5,
+      "category": "TypeScript型安全性",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "`any` を使わず適切な型定義をしているか",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 6,
+      "category": "TypeScript型安全性",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "Zodスキーマでバリデーションしているか（外部データ）",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 7,
+      "category": "TypeScript型安全性",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "`bun run lint` が通るか",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 8,
+      "category": "セキュリティ",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "API KEY・トークンがハードコードされていないか",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 9,
+      "category": "コーディングスタイル",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "インデントが2スペースで統一されているか",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 10,
+      "category": "コーディングスタイル",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "セミコロンが使用されているか",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 11,
+      "category": "コーディングスタイル",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "命名規則が一貫しているか\n\n---",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 12,
+      "category": "3. デグレーションチェック",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "既存機能への悪影響がないか",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    },
+    {
+      "id": 13,
+      "category": "3. デグレーションチェック",
+      "file": "unknown",
+      "verification_type": "diff_check",
+      "rule": "既存テストが通るか",
+      "check_method": "diff",
+      "reason": "",
+      "checked": false
+    }
+  ]
+}
