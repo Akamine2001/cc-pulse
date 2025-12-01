@@ -24,6 +24,7 @@ class JulesApiError extends Error {
 export class FeatureReviewOrchestrator {
   private issueClient: IssueClient;
   private julesClient: JulesApiClient;
+  private isLocalMode: boolean;
 
   constructor(
     private octokit: Octokit,
@@ -32,6 +33,7 @@ export class FeatureReviewOrchestrator {
     private issueNumber: number
   ) {
     this.issueClient = new IssueClient(octokit, owner, repo);
+    this.isLocalMode = process.env.LOCAL_MODE === 'true';
     
     // JULES_API_KEY環境変数のバリデーション
     const apiKey = process.env.JULES_API_KEY;
@@ -61,6 +63,14 @@ export class FeatureReviewOrchestrator {
       const issue = await this.fetchIssue();
       console.log(`✅ Issue #${issue.number}: ${issue.title}`);
       console.log('');
+
+      // ====== Phase 1.5: 次のステップコメント投稿 【新規】 ======
+      if (!this.isLocalMode) {
+        console.log('💬 Posting next steps comment...');
+        await this.postNextStepsComment();
+        console.log('✅ Next steps comment posted');
+        console.log('');
+      }
 
       const subIssueTitle = `[レビュー・テスト観点] ${issue.title}`;
 
@@ -95,10 +105,7 @@ export class FeatureReviewOrchestrator {
         issue.title
       );
 
-      // ローカルモード判定
-      const isLocalMode = process.env.LOCAL_MODE === 'true';
-
-      if (isLocalMode) {
+      if (this.isLocalMode) {
         // ローカルモード: mdファイルに保存
         console.log('📝 Saving guidelines to local file (LOCAL_MODE=true)...');
 
@@ -171,6 +178,14 @@ export class FeatureReviewOrchestrator {
    */
   private async createSubIssue(title: string, body: string) {
     return await this.issueClient.createIssue(title, body);
+  }
+
+  /**
+   * 次のステップコメントを投稿
+   */
+  private async postNextStepsComment(): Promise<void> {
+    const template = await this.loadTemplate('next-steps.md');
+    await this.issueClient.postComment(this.issueNumber, template);
   }
 
   /**
